@@ -132,6 +132,12 @@ type RecordsResponse = {
   next_cursor?: unknown
 }
 
+export type ListRemoteCapturesOptions = {
+  limit?: number
+  url?: string
+  signal?: AbortSignal
+}
+
 function isRemoteCapture(record: unknown): record is RemoteCapture {
   if (!record || typeof record !== 'object') return false
   const value = record as Partial<RemoteCapture>
@@ -143,10 +149,10 @@ function getNextCursor(body: RecordsResponse) {
   return typeof cursor === 'string' && cursor.length > 0 ? cursor : undefined
 }
 
-export async function listRemoteCaptures(config: ContextServerConfig, limit = 100): Promise<{ ok: true; captures: RemoteCapture[] } | { ok: false; error: string }> {
+export async function listRemoteCaptures(config: ContextServerConfig, options: ListRemoteCapturesOptions = {}): Promise<{ ok: true; captures: RemoteCapture[] } | { ok: false; error: string }> {
   try {
     const { endpointUrl, apiToken } = getServerConfig(config)
-    const pageSize = Math.min(Math.max(Math.floor(limit), 1), MAX_RECORDS_PAGE_SIZE)
+    const pageSize = Math.min(Math.max(Math.floor(options.limit ?? MAX_RECORDS_PAGE_SIZE), 1), MAX_RECORDS_PAGE_SIZE)
     const captures: RemoteCapture[] = []
     const seenRecordIds = new Set<string>()
     const seenCursors = new Set<string>()
@@ -157,11 +163,13 @@ export async function listRemoteCaptures(config: ContextServerConfig, limit = 10
     // subsequent pages so the library and "전체 생각 복사" both use every record.
     while (true) {
       const query = new URLSearchParams({ limit: String(pageSize) })
+      if (options.url !== undefined) query.set('url', options.url)
       if (cursor) query.set('cursor', cursor)
       else if (offset > 0) query.set('offset', String(offset))
 
       const response = await fetch(`${endpointUrl}/v1/records?${query}`, {
-        headers: createHeaders(apiToken, { accept: 'application/json' })
+        headers: createHeaders(apiToken, { accept: 'application/json' }),
+        signal: options.signal
       })
       if (!response.ok) return { ok: false, error: `Server returned ${response.status}.` }
 

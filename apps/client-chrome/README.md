@@ -35,6 +35,11 @@ Worker URL과 read/write API token을 함께 입력하세요. token은 확장 �
 달라지면 Chrome 저장소도 별도로 분리됩니다. Context Server 주소와 token은
 번들에 포함하지 않으며, 각 설치에서 직접 입력합니다.
 
+`저장된 설정을 열지 못했습니다` 화면이 보이면 새 보관 방식을 선택하지 말고
+**다시 시도**하세요. 이 화면은 Chrome 저장소 오류가 기존 연결과 기록을
+덮어쓰지 않도록 막습니다. 과거 버전이 이미 지운 Cloudflare 주소나 token은
+자동 복구할 수 없으므로 한 번 다시 입력해야 합니다.
+
 전체 로컬 Worker/D1 실행과 Cloudflare D1 배포 절차는
 [`docs/setup-modes.md`](../../docs/setup-modes.md)를 따르세요.
 

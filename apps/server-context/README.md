@@ -62,7 +62,7 @@ curl -X POST http://localhost:8787/v1/records \
 
 The client creates the UUID. Repeating the exact same request returns `200` with `idempotent: true`; reusing the ID with different content returns `409`.
 
-`GET /v1/records?limit=50&cursor=<cursor>` lists newest records first by the actual instant represented by `recordedAt`. `limit` is 1–100; the opaque cursor is returned as `nextCursor`.
+`GET /v1/records?limit=50&cursor=<cursor>` lists newest records first by the actual instant represented by `recordedAt`. `limit` is 1–100; the opaque cursor is returned as `nextCursor`. Add an encoded `url` query parameter to return only captures whose `context.browser.url` is exactly that URL; it is intended for the Chrome linked-thought lookup and does not match by domain or origin.
 
 `DELETE /v1/records/:id` permanently removes one record and returns `204`; it returns `404` if the record does not exist. It requires a token with the `delete` scope.
 
@@ -108,6 +108,7 @@ The production resources are named `server-context` (Worker) and `db-context`
 6. Apply production migrations: `pnpm db:migrate:remote`.
 7. Create at least one remote token with `pnpm token:create -- --remote ...`.
 8. Deploy: `pnpm run deploy`.
+9. Only then publish or reload the Chrome extension version that uses URL-filtered linked-thought requests.
 
 Do not run steps 6–8 against an unknown account or database. Before the first remote deployment, verify the account with `pnpm exec wrangler whoami`, review the `database_id`, and confirm that the migration target is `db-context`. A placeholder `database_id`, an empty production `ALLOWED_ORIGINS`, or an unconfirmed Rate Limit namespace is a stop condition.
 

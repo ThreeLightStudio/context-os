@@ -5,111 +5,167 @@ import type { AppData, DeploymentMode, SyncState } from './types'
 const STORAGE_KEY = 'contextShelf:v1'
 const API_TOKEN_STORAGE_KEY = 'contextShelf:api-token:v1'
 const BRAIN_API_TOKEN_STORAGE_KEY = 'contextShelf:brain-api-token:v1'
-// SHA-256 fingerprints let existing installs disconnect retired private Workers
-// without retaining their hostnames or account identifiers in public source.
-const RETIRED_CONTEXT_SERVER_HOST_FINGERPRINTS = new Set([
-  'fd200e8cb7d2cf0b87c9f6e68775ac46c91c996eb1cbea085e29a520334da4da',
-  '54a785326e20eb511727e9f93afbc0cc2fc97ace7503b142a4838fdea8f88a18'
-])
+
+export class StorageAccessError extends Error {
+  constructor(operation: 'read' | 'write') {
+    super(`Extension storage ${operation} failed.`)
+    this.name = 'StorageAccessError'
+  }
+}
+
+export type StoredSettings = {
+  data: AppData
+  apiToken: string
+  brainApiToken: string
+}
 
 function hasChromeStorage() {
   return typeof chrome !== 'undefined' && Boolean(chrome.storage?.local)
 }
 
-export async function loadAppData(): Promise<AppData> {
-  if (hasChromeStorage()) {
-    const result = await new Promise<Record<string, StoredAppData | undefined>>((resolve) => {
-      chrome.storage.local.get([STORAGE_KEY], (items) => {
-        resolve(items as Record<string, StoredAppData | undefined>)
-      })
+function storageError(operation: 'read' | 'write') {
+  return chrome.runtime?.lastError ? new StorageAccessError(operation) : undefined
+}
+
+async function readChromeStorage(keys: string[]): Promise<Record<string, unknown>> {
+  return await new Promise<Record<string, unknown>>((resolve, reject) => {
+    chrome.storage.local.get(keys, (items) => {
+      const error = storageError('read')
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve(items)
     })
-    return await migrateStoredData(result[STORAGE_KEY])
-  }
+  })
+}
 
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) return seedData
+async function writeChromeStorage(values: Record<string, unknown>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    chrome.storage.local.set(values, () => {
+      const error = storageError('write')
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve()
+    })
+  })
+}
 
+function readLocalStorage(key: string) {
   try {
-    return await migrateStoredData(JSON.parse(raw) as StoredAppData)
+    return window.localStorage.getItem(key)
   } catch {
-    return seedData
+    throw new StorageAccessError('read')
   }
+}
+
+function writeLocalStorage(values: Record<string, string>) {
+  try {
+    for (const [key, value] of Object.entries(values)) window.localStorage.setItem(key, value)
+  } catch {
+    throw new StorageAccessError('write')
+  }
+}
+
+async function readStoredValues(): Promise<Record<string, unknown>> {
+  const keys = [STORAGE_KEY, API_TOKEN_STORAGE_KEY, BRAIN_API_TOKEN_STORAGE_KEY]
+  if (hasChromeStorage()) return await readChromeStorage(keys)
+
+  return Object.fromEntries(keys.map((key) => [key, readLocalStorage(key)]))
+}
+
+function parseStoredAppData(value: unknown): StoredAppData | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as StoredAppData
+    } catch {
+      throw new StorageAccessError('read')
+    }
+  }
+  if (typeof value !== 'object') throw new StorageAccessError('read')
+  return value as StoredAppData
+}
+
+export async function loadStoredSettings(): Promise<StoredSettings> {
+  const values = await readStoredValues()
+  return {
+    data: await migrateStoredData(parseStoredAppData(values[STORAGE_KEY])),
+    apiToken: typeof values[API_TOKEN_STORAGE_KEY] === 'string' ? values[API_TOKEN_STORAGE_KEY].trim() : '',
+    brainApiToken: typeof values[BRAIN_API_TOKEN_STORAGE_KEY] === 'string' ? values[BRAIN_API_TOKEN_STORAGE_KEY].trim() : ''
+  }
+}
+
+export async function loadAppData(): Promise<AppData> {
+  return (await loadStoredSettings()).data
 }
 
 export async function saveAppData(data: AppData): Promise<void> {
   if (hasChromeStorage()) {
-    await new Promise<void>((resolve) => {
-      chrome.storage.local.set({ [STORAGE_KEY]: data }, () => resolve())
-    })
+    await writeChromeStorage({ [STORAGE_KEY]: data })
     return
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  writeLocalStorage({ [STORAGE_KEY]: JSON.stringify(data) })
 }
 
 export async function loadApiToken(): Promise<string> {
-  if (hasChromeStorage()) {
-    return await new Promise<string>((resolve) => {
-      chrome.storage.local.get([API_TOKEN_STORAGE_KEY], (items) => {
-        const token = items[API_TOKEN_STORAGE_KEY]
-        resolve(typeof token === 'string' ? token.trim() : '')
-      })
-    })
-  }
-
-  try {
-    return window.localStorage.getItem(API_TOKEN_STORAGE_KEY)?.trim() ?? ''
-  } catch {
-    return ''
-  }
+  return (await loadStoredSettings()).apiToken
 }
 
 export async function saveApiToken(token: string): Promise<void> {
   const value = token.trim()
   if (hasChromeStorage()) {
-    await new Promise<void>((resolve) => {
-      chrome.storage.local.set({ [API_TOKEN_STORAGE_KEY]: value }, () => resolve())
-    })
+    await writeChromeStorage({ [API_TOKEN_STORAGE_KEY]: value })
     return
   }
 
-  try {
-    window.localStorage.setItem(API_TOKEN_STORAGE_KEY, value)
-  } catch {
-    // Private browsing or disabled storage should not prevent local capture.
-  }
+  writeLocalStorage({ [API_TOKEN_STORAGE_KEY]: value })
 }
 
 export async function loadBrainApiToken(): Promise<string> {
-  if (hasChromeStorage()) {
-    return await new Promise<string>((resolve) => {
-      chrome.storage.local.get([BRAIN_API_TOKEN_STORAGE_KEY], (items) => {
-        const token = items[BRAIN_API_TOKEN_STORAGE_KEY]
-        resolve(typeof token === 'string' ? token.trim() : '')
-      })
-    })
-  }
-
-  try {
-    return window.localStorage.getItem(BRAIN_API_TOKEN_STORAGE_KEY)?.trim() ?? ''
-  } catch {
-    return ''
-  }
+  return (await loadStoredSettings()).brainApiToken
 }
 
 export async function saveBrainApiToken(token: string): Promise<void> {
   const value = token.trim()
   if (hasChromeStorage()) {
-    await new Promise<void>((resolve) => {
-      chrome.storage.local.set({ [BRAIN_API_TOKEN_STORAGE_KEY]: value }, () => resolve())
-    })
+    await writeChromeStorage({ [BRAIN_API_TOKEN_STORAGE_KEY]: value })
     return
   }
 
-  try {
-    window.localStorage.setItem(BRAIN_API_TOKEN_STORAGE_KEY, value)
-  } catch {
+  writeLocalStorage({ [BRAIN_API_TOKEN_STORAGE_KEY]: value })
+}
+
+export async function saveStoredSettings(settings: StoredSettings): Promise<void> {
+  const values = {
+    [STORAGE_KEY]: settings.data,
+    [API_TOKEN_STORAGE_KEY]: settings.apiToken.trim(),
+    [BRAIN_API_TOKEN_STORAGE_KEY]: settings.brainApiToken.trim()
   }
+  if (hasChromeStorage()) {
+    await writeChromeStorage(values)
+    return
+  }
+
+  writeLocalStorage({
+    [STORAGE_KEY]: JSON.stringify(settings.data),
+    [API_TOKEN_STORAGE_KEY]: values[API_TOKEN_STORAGE_KEY],
+    [BRAIN_API_TOKEN_STORAGE_KEY]: values[BRAIN_API_TOKEN_STORAGE_KEY]
+  })
+}
+
+export function subscribeToStoredSettingsChanges(listener: () => void): () => void {
+  if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) return () => {}
+
+  const handleChanges = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+    if (areaName !== 'local') return
+    if ([STORAGE_KEY, API_TOKEN_STORAGE_KEY, BRAIN_API_TOKEN_STORAGE_KEY].some((key) => key in changes)) listener()
+  }
+  chrome.storage.onChanged.addListener(handleChanges)
+  return () => chrome.storage.onChanged.removeListener(handleChanges)
 }
 
 type LegacyAppData = Omit<AppData, 'schemaVersion' | 'sync'> & {
@@ -122,23 +178,10 @@ type StoredAppData = AppData | LegacyAppData
 type NormalizedData = {
   data: AppData
   shouldPersist: boolean
-  shouldClearApiToken: boolean
 }
 
 function normalizeEndpoint(value: string | undefined): string {
   return value?.trim().replace(/\/+$/, '') ?? ''
-}
-
-async function isRetiredContextServer(endpointUrl: string): Promise<boolean> {
-  try {
-    const hostname = new URL(endpointUrl).hostname.toLocaleLowerCase()
-    const digest = await globalThis.crypto?.subtle.digest('SHA-256', new TextEncoder().encode(hostname))
-    if (!digest) return false
-    const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
-    return RETIRED_CONTEXT_SERVER_HOST_FINGERPRINTS.has(fingerprint)
-  } catch {
-    return false
-  }
 }
 
 export function isLocalContextServerUrl(endpointUrl: string): boolean {
@@ -154,22 +197,19 @@ function inferMode(endpointUrl: string): DeploymentMode {
   return endpointUrl === '' || isLocalContextServerUrl(endpointUrl) ? 'local' : 'cloudflare'
 }
 
-function normalizeStoredData(stored: StoredAppData | undefined, isRetiredEndpoint = false): NormalizedData {
-  if (!stored) return { data: seedData, shouldPersist: false, shouldClearApiToken: false }
+function normalizeStoredData(stored: StoredAppData | undefined): NormalizedData {
+  if (!stored) return { data: seedData, shouldPersist: false }
 
   const rawEndpoint = normalizeEndpoint(stored.sync?.endpointUrl)
-  // Schema v1 did not carry an explicit connection choice. Retired endpoints
-  // are reset as well, while all other user-configured endpoints are retained.
-  const shouldClearApiToken = stored.schemaVersion === 1 || isRetiredEndpoint
-  const endpointUrl = shouldClearApiToken ? '' : rawEndpoint
+  // Schema v1 did not carry an explicit connection choice, so start it locally.
+  // Later schemas retain the user's saved endpoint without inspecting its host.
+  const endpointUrl = stored.schemaVersion === 1 ? '' : rawEndpoint
   const mode = stored.schemaVersion === 3 && stored.sync?.mode
     ? stored.sync.mode
     : inferMode(endpointUrl)
-  const setupComplete = shouldClearApiToken
-    ? false
-    : stored.schemaVersion === 3 && typeof stored.sync?.setupComplete === 'boolean'
-      ? stored.sync.setupComplete
-      : endpointUrl !== ''
+  const setupComplete = stored.schemaVersion === 3 && typeof stored.sync?.setupComplete === 'boolean'
+    ? stored.sync.setupComplete
+    : endpointUrl !== ''
   const next: AppData = {
     ...stored,
     schemaVersion: 3,
@@ -189,16 +229,12 @@ function normalizeStoredData(stored: StoredAppData | undefined, isRetiredEndpoin
     stored.sync?.brainEndpointUrl !== next.sync.brainEndpointUrl ||
     stored.sync?.outbox === undefined ||
     stored.sync?.developerMode === undefined
-  return { data: next, shouldPersist, shouldClearApiToken }
+  return { data: next, shouldPersist }
 }
 
 async function migrateStoredData(stored: StoredAppData | undefined): Promise<AppData> {
-  const isRetiredEndpoint = await isRetiredContextServer(normalizeEndpoint(stored?.sync?.endpointUrl))
-  const normalized = normalizeStoredData(stored, isRetiredEndpoint)
-  await Promise.all([
-    normalized.shouldPersist ? saveAppData(normalized.data) : Promise.resolve(),
-    normalized.shouldClearApiToken ? saveApiToken('') : Promise.resolve()
-  ])
+  const normalized = normalizeStoredData(stored)
+  if (normalized.shouldPersist) await saveAppData(normalized.data)
   return normalized.data
 }
 

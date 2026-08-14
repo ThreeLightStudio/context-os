@@ -131,3 +131,5 @@ pnpm --filter server-brain start
 - 실제 `wrangler.jsonc`, `.dev.vars`, `.env`, `ctx_…` token, `.wrangler` 데이터는 커밋하거나 공유하지 않습니다.
 - 로컬 D1을 옮기거나 백업할 때는 `wrangler d1 export db-context --local`을 사용하고, 내보낸 데이터는 별도로 보호합니다.
 - Cloudflare에서 기기를 분실하거나 token이 노출되면 `pnpm token:revoke -- --remote --id <token-id>`로 즉시 폐기하고 새 token을 만듭니다.
+- 같은 Chrome 확장 ID에서는 패널·탭 전환 후에도 연결 설정이 유지됩니다. `저장된 설정을 열지 못했습니다`가 표시되면 새 모드를 선택하지 말고 **다시 시도**해 기존 Chrome 저장소를 보호하세요.
+- 이미 과거 버전에서 삭제된 Cloudflare URL이나 token은 복구할 수 없습니다. URL과 token을 한 번 다시 입력하고 **연결 확인 및 저장**을 실행하세요.

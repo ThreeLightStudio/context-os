@@ -27,7 +27,18 @@ class FakeStatement {
   }
 
   async all<T>(): Promise<{ results: T[] }> {
-    return { results: [...this.db.records.values()] as T[] };
+    const hasUrlFilter = this.sql.includes("json_extract(data, '$.context.browser.url') = ?");
+    const hasCursor = this.sql.includes("recorded_at < ? OR (recorded_at = ? AND id < ?)");
+    const urlFilter = hasUrlFilter ? this.args[0] as string : undefined;
+    const cursorIndex = hasUrlFilter ? 1 : 0;
+    const cursor = hasCursor ? [this.args[cursorIndex] as string, this.args[cursorIndex + 2] as string] as const : undefined;
+    const limit = this.args.at(-1) as number;
+    const records = [...this.db.records.values()]
+      .filter((record) => !urlFilter || JSON.parse(record.data).context?.browser?.url === urlFilter)
+      .filter((record) => !cursor || record.recorded_at < cursor[0] || (record.recorded_at === cursor[0] && record.id < cursor[1]))
+      .sort((left, right) => right.recorded_at.localeCompare(left.recorded_at) || right.id.localeCompare(left.id))
+      .slice(0, limit);
+    return { results: records as T[] };
   }
 
   async run(): Promise<{ meta: { changes: number } }> {
@@ -157,6 +168,58 @@ describe("record API security", () => {
     const response = await worker.fetch(request(`/v1/records/${payload.id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }), env(db));
     expect(response.status).toBe(204);
     expect(db.records.has(payload.id)).toBe(false);
+  });
+
+  it("filters records by an exact browser URL without changing cursor pagination or full-history reads", async () => {
+    const db = new FakeDb();
+    const matchingUrl = "https://example.test/project?view=all";
+    const stored = (id: string, recordedAt: string, browserUrl?: string): FakeRecord => ({
+      id,
+      recorded_at: recordedAt,
+      received_at: "2026-08-14T00:00:00.000Z",
+      schema_version: 1,
+      data: JSON.stringify({
+        kind: "capture",
+        content: id,
+        source: { client: "chrome" },
+        ...(browserUrl ? { context: { browser: { url: browserUrl } } } : {}),
+      }),
+    });
+    db.records.set("matching-new", stored("matching-new", "2026-08-14T03:00:00.000Z", matchingUrl));
+    db.records.set("other", stored("other", "2026-08-14T02:00:00.000Z", "https://example.test/other"));
+    db.records.set("matching-old", stored("matching-old", "2026-08-14T01:00:00.000Z", matchingUrl));
+    const token = await setupToken(db, { read: true });
+
+    const first = await worker.fetch(request(`/v1/records?limit=1&url=${encodeURIComponent(matchingUrl)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    }), env(db));
+    expect(first.status).toBe(200);
+    const firstBody = await first.json() as { records: Array<{ id: string }>; nextCursor: string | null };
+    expect(firstBody.records.map((record) => record.id)).toEqual(["matching-new"]);
+    expect(firstBody.nextCursor).toEqual(expect.any(String));
+
+    const second = await worker.fetch(request(`/v1/records?limit=1&url=${encodeURIComponent(matchingUrl)}&cursor=${encodeURIComponent(firstBody.nextCursor!)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    }), env(db));
+    const secondBody = await second.json() as { records: Array<{ id: string }>; nextCursor: string | null };
+    expect(secondBody.records.map((record) => record.id)).toEqual(["matching-old"]);
+    expect(secondBody.nextCursor).toBeNull();
+
+    const fullHistory = await worker.fetch(request("/v1/records?limit=10", {
+      headers: { authorization: `Bearer ${token}` },
+    }), env(db));
+    const fullHistoryBody = await fullHistory.json() as { records: Array<{ id: string }> };
+    expect(fullHistoryBody.records.map((record) => record.id)).toEqual(["matching-new", "other", "matching-old"]);
+  });
+
+  it("rejects empty and oversized browser URL filters", async () => {
+    const db = new FakeDb();
+    const token = await setupToken(db, { read: true });
+
+    const empty = await worker.fetch(request("/v1/records?url=", { headers: { authorization: `Bearer ${token}` } }), env(db));
+    expect(empty.status).toBe(400);
+    const oversized = await worker.fetch(request(`/v1/records?url=${"a".repeat(8 * 1024 + 1)}`, { headers: { authorization: `Bearer ${token}` } }), env(db));
+    expect(oversized.status).toBe(400);
   });
 
   it("returns 429 when the Cloudflare rate limit binding rejects a request", async () => {

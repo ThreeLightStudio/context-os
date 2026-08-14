@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isLocalContextServerUrl, loadAppData, normalizeData } from '../src/storage'
+import { isLocalContextServerUrl, loadAppData, loadStoredSettings, normalizeData, saveStoredSettings, StorageAccessError, subscribeToStoredSettingsChanges } from '../src/storage'
 import type { AppData } from '../src/types'
 
 function legacyData(endpointUrl: string): Omit<AppData, 'schemaVersion' | 'sync'> & {
@@ -44,48 +44,6 @@ describe('storage schema migration', () => {
     const data = normalizeData(versionOneData())
     expect(data.sync).toMatchObject({ mode: 'local', setupComplete: false, endpointUrl: '' })
     expect(data.sync.brainEndpointUrl).toBe('http://127.0.0.1:8788')
-  })
-
-  it('clears a retired connection and its API token while preserving local data', async () => {
-    const stored = legacyData('https://retired.example.invalid')
-    stored.sync.outbox.push({
-      memoryId: 'memory-1',
-      capture: {
-        id: '01983f0d-7b32-7b4d-8d5b-8ff24c3b1001',
-        recordedAt: '2026-08-14T00:00:00.000Z',
-        data: { kind: 'capture', content: 'keep me', source: { client: 'chrome' } }
-      },
-      createdAt: '2026-08-14T00:00:00.000Z'
-    })
-    const values: Record<string, unknown> = {
-      'contextShelf:v1': stored,
-      'contextShelf:api-token:v1': 'ctx_retired'
-    }
-    vi.stubGlobal('crypto', {
-      subtle: {
-        digest: async () => new Uint8Array([
-          253, 32, 14, 140, 183, 210, 207, 11, 135, 201, 246, 230, 135, 117, 172, 70,
-          201, 28, 153, 110, 177, 203, 234, 8, 94, 41, 165, 32, 51, 77, 164, 218
-        ]).buffer
-      }
-    })
-    vi.stubGlobal('chrome', {
-      storage: {
-        local: {
-          get: (_keys: string[], callback: (items: Record<string, unknown>) => void) => callback(values),
-          set: (next: Record<string, unknown>, callback: () => void) => {
-            Object.assign(values, next)
-            callback()
-          }
-        }
-      }
-    })
-
-    const data = await loadAppData()
-
-    expect(data.sync).toMatchObject({ mode: 'local', setupComplete: false, endpointUrl: '' })
-    expect(data.sync.outbox).toHaveLength(1)
-    expect(values['contextShelf:api-token:v1']).toBe('')
   })
 
   it('keeps a stored workers.dev endpoint and API token across repeated loads', async () => {
@@ -141,5 +99,96 @@ describe('local Context Server detection', () => {
 
   it('does not classify a Cloudflare URL as local', () => {
     expect(isLocalContextServerUrl('https://context.example.com')).toBe(false)
+  })
+})
+
+describe('Chrome storage safety', () => {
+  it('returns a storage error instead of treating a failed read as a new installation', async () => {
+    vi.stubGlobal('chrome', {
+      runtime: {
+        get lastError() {
+          return { message: 'storage unavailable' }
+        }
+      },
+      storage: {
+        local: {
+          get: (_keys: string[], callback: (items: Record<string, unknown>) => void) => callback({})
+        }
+      }
+    })
+
+    await expect(loadStoredSettings()).rejects.toBeInstanceOf(StorageAccessError)
+  })
+
+  it('writes app data and both tokens together', async () => {
+    const values: Record<string, unknown> = {}
+    const writes: Record<string, unknown>[] = []
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          set: (next: Record<string, unknown>, callback: () => void) => {
+            writes.push(next)
+            Object.assign(values, next)
+            callback()
+          }
+        }
+      }
+    })
+
+    const data = normalizeData(legacyData('https://saved.example.workers.dev'))
+    await saveStoredSettings({ data, apiToken: 'ctx_saved', brainApiToken: 'brain_saved' })
+
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toMatchObject({
+      'contextShelf:v1': data,
+      'contextShelf:api-token:v1': 'ctx_saved',
+      'contextShelf:brain-api-token:v1': 'brain_saved'
+    })
+    expect(values).toMatchObject(writes[0])
+  })
+
+  it('reports a failed bundled write without changing the stored values', async () => {
+    const values: Record<string, unknown> = { 'contextShelf:api-token:v1': 'ctx_existing' }
+    vi.stubGlobal('chrome', {
+      runtime: {
+        get lastError() {
+          return { message: 'quota exceeded' }
+        }
+      },
+      storage: {
+        local: {
+          set: (_next: Record<string, unknown>, callback: () => void) => callback()
+        }
+      }
+    })
+
+    await expect(saveStoredSettings({
+      data: normalizeData(legacyData('https://saved.example.workers.dev')),
+      apiToken: 'ctx_new',
+      brainApiToken: 'brain_new'
+    })).rejects.toBeInstanceOf(StorageAccessError)
+    expect(values['contextShelf:api-token:v1']).toBe('ctx_existing')
+  })
+
+  it('notifies surfaces only for relevant local storage changes', () => {
+    let changeHandler: ((changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void) | undefined
+    const listener = vi.fn()
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {},
+        onChanged: {
+          addListener: (handler: typeof changeHandler) => { changeHandler = handler },
+          removeListener: vi.fn()
+        }
+      }
+    })
+
+    const unsubscribe = subscribeToStoredSettingsChanges(listener)
+    changeHandler?.({ unrelated: { newValue: true } }, 'local')
+    changeHandler?.({ 'contextShelf:v1': { newValue: normalizeData(undefined) } }, 'local')
+    changeHandler?.({ 'contextShelf:v1': { newValue: normalizeData(undefined) } }, 'sync')
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    unsubscribe()
   })
 })

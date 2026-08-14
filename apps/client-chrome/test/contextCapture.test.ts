@@ -69,6 +69,21 @@ describe('listRemoteCaptures', () => {
     expect(fetchMock.mock.calls[0][0]).not.toContain('test-token')
   })
 
+  it('passes an encoded exact URL filter and cancellation signal to every page request', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ records: [], nextCursor: null }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(listRemoteCaptures(
+      { endpointUrl: 'https://context.test', apiToken: 'test-token' },
+      { url: 'https://example.test/path?a=one two&b=한글', signal: controller.signal }
+    )).resolves.toEqual({ ok: true, captures: [] })
+
+    const requestUrl = new URL(fetchMock.mock.calls[0][0] as string)
+    expect(requestUrl.searchParams.get('url')).toBe('https://example.test/path?a=one two&b=한글')
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBe(controller.signal)
+  })
+
   it('does not make unauthenticated requests when the token is missing', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

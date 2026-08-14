@@ -10,6 +10,8 @@ export interface Env {
 }
 
 type StoredRecord = { id: string; recorded_at: string; received_at: string; schema_version: number; data: string };
+const MAX_BROWSER_URL_BYTES = 8 * 1024;
+const textEncoder = new TextEncoder();
 const securityHeaders = {
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
@@ -112,11 +114,19 @@ async function createRecord(request: Request, env: Env): Promise<Response> {
 async function listRecords(url: URL, env: Env, request: Request): Promise<Response> {
   const requestedLimit = Number(url.searchParams.get("limit") ?? "50");
   if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) return error(400, "limit must be an integer from 1 to 100", request, env);
+  const browserUrl = url.searchParams.get("url");
+  if (url.searchParams.has("url") && (!browserUrl || textEncoder.encode(browserUrl).byteLength > MAX_BROWSER_URL_BYTES)) {
+    return error(400, "url must be a non-empty string up to 8KB", request, env);
+  }
   const cursor = decodeCursor(url.searchParams.get("cursor"));
   if (url.searchParams.has("cursor") && !cursor) return error(400, "cursor is invalid", request, env);
-  const query = cursor
-    ? env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records WHERE julianday(recorded_at) < julianday(?) OR (julianday(recorded_at) = julianday(?) AND id < ?) ORDER BY julianday(recorded_at) DESC, id DESC LIMIT ?").bind(cursor[0], cursor[0], cursor[1], requestedLimit + 1)
-    : env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records ORDER BY julianday(recorded_at) DESC, id DESC LIMIT ?").bind(requestedLimit + 1);
+  const query = browserUrl
+    ? cursor
+      ? env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records WHERE json_extract(data, '$.context.browser.url') = ? AND (recorded_at < ? OR (recorded_at = ? AND id < ?)) ORDER BY recorded_at DESC, id DESC LIMIT ?").bind(browserUrl, cursor[0], cursor[0], cursor[1], requestedLimit + 1)
+      : env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records WHERE json_extract(data, '$.context.browser.url') = ? ORDER BY recorded_at DESC, id DESC LIMIT ?").bind(browserUrl, requestedLimit + 1)
+    : cursor
+      ? env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records WHERE recorded_at < ? OR (recorded_at = ? AND id < ?) ORDER BY recorded_at DESC, id DESC LIMIT ?").bind(cursor[0], cursor[0], cursor[1], requestedLimit + 1)
+      : env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records ORDER BY recorded_at DESC, id DESC LIMIT ?").bind(requestedLimit + 1);
   const { results } = await query.all<StoredRecord>();
   const hasMore = results.length > requestedLimit;
   const rows = hasMore ? results.slice(0, -1) : results;

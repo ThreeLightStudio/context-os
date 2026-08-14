@@ -6,7 +6,8 @@ import type { DailySummaryResult } from './brainCapture'
 import { DEFAULT_BRAIN_SERVER_URL } from './config'
 import { checkContextServerConnection, createUrlMemoryCapture, deleteRemoteCapture, listRemoteCaptures, normalizeEndpointUrl, postCapture } from './contextCapture'
 import type { RemoteCapture } from './contextCapture'
-import { loadApiToken, loadAppData, loadBrainApiToken, saveApiToken, saveAppData, saveBrainApiToken } from './storage'
+import { filterLinkedThoughtsForUrl, LinkedThoughtsLoader } from './linkedThoughts'
+import { loadStoredSettings, saveAppData, saveStoredSettings, subscribeToStoredSettingsChanges } from './storage'
 import { copyTextToClipboard, filterThoughtsForCopy, formatThoughtsForClipboard, getThoughtCopyRange } from './thoughtExport'
 import type { AppData, CaptureOutboxItem, ChromeSurface, DeploymentMode, SavedTab, UrlMemory } from './types'
 import type { ThoughtCopyRange } from './thoughtExport'
@@ -14,6 +15,7 @@ import { createId, nowIso } from './utils'
 
 type Screen = 'capture' | 'settings' | 'setup' | 'thoughts' | 'summary'
 type ThoughtLinkResult = 'opened' | 'missing' | 'invalid' | 'failed'
+type StorageLoadState = 'loading' | 'ready' | 'error'
 
 export function canCaptureOnUrl(url: string | undefined) {
   if (!url) return false
@@ -27,6 +29,8 @@ export function canCaptureOnUrl(url: string | undefined) {
 
 export function App({ surface }: { surface: ChromeSurface }) {
   const [data, setData] = useState<AppData | null>(null)
+  const [storageLoadState, setStorageLoadState] = useState<StorageLoadState>('loading')
+  const [storageError, setStorageError] = useState('')
   const [activeTab, setActiveTab] = useState<SavedTab | null>(null)
   const [note, setNote] = useState('')
   const [screen, setScreen] = useState<Screen>('capture')
@@ -52,32 +56,70 @@ export function App({ surface }: { surface: ChromeSurface }) {
   const [summaryResult, setSummaryResult] = useState<DailySummaryResult | null>(null)
   const [summaryStatus, setSummaryStatus] = useState('')
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [settingsChangedElsewhere, setSettingsChangedElsewhere] = useState(false)
   const activeTabUrlRef = useRef<string | undefined>(undefined)
   const noteRef = useRef('')
+  const screenRef = useRef<Screen>('capture')
+  const settingsDirtyRef = useRef(false)
+  const brainSettingsDirtyRef = useRef(false)
+  const linkedThoughtsLoaderRef = useRef<LinkedThoughtsLoader | null>(null)
+  if (!linkedThoughtsLoaderRef.current) linkedThoughtsLoaderRef.current = new LinkedThoughtsLoader()
+  const linkedThoughtsLoader = linkedThoughtsLoaderRef.current
 
   useEffect(() => {
     noteRef.current = note
   }, [note])
 
   useEffect(() => {
-    void loadAppData().then(async (loaded) => {
-      const [savedApiToken, savedBrainApiToken] = await Promise.all([loadApiToken(), loadBrainApiToken()])
-      setData(loaded)
-      setDeploymentMode(loaded.sync.mode)
-      setEndpoint(loaded.sync.endpointUrl)
-      setApiToken(savedApiToken)
-      setBrainEndpoint(loaded.sync.brainEndpointUrl)
-      setBrainApiToken(savedBrainApiToken)
-      setScreen(loaded.sync.setupComplete ? 'capture' : 'setup')
-    })
-    void getActiveTab().then(setActiveTab)
-    return subscribeToActiveTab(setActiveTab)
+    screenRef.current = screen
+  }, [screen])
+
+  const refreshStoredSettings = useCallback(async (options: { initial?: boolean; replaceSettingsForm?: boolean } = {}) => {
+    if (options.initial) {
+      setStorageLoadState('loading')
+      setStorageError('')
+    }
+    try {
+      const stored = await loadStoredSettings()
+      setData(stored.data)
+      const preserveSettingsForm = screenRef.current === 'settings' && settingsDirtyRef.current && !options.replaceSettingsForm
+      if (preserveSettingsForm) {
+        setSettingsChangedElsewhere(true)
+      } else {
+        setDeploymentMode(stored.data.sync.mode)
+        setEndpoint(stored.data.sync.endpointUrl)
+        setApiToken(stored.apiToken)
+        setBrainEndpoint(stored.data.sync.brainEndpointUrl)
+        setBrainApiToken(stored.brainApiToken)
+        setSettingsChangedElsewhere(false)
+        if (options.initial) setScreen(stored.data.sync.setupComplete ? 'capture' : 'setup')
+      }
+      setStorageLoadState('ready')
+    } catch {
+      setStorageLoadState('error')
+      setStorageError('저장된 설정을 불러오지 못했습니다. 기존 데이터를 보호하기 위해 새 설정을 시작하지 않았습니다.')
+    }
   }, [])
 
+  useEffect(() => {
+    void refreshStoredSettings({ initial: true, replaceSettingsForm: true })
+    const unsubscribe = subscribeToStoredSettingsChanges(() => { void refreshStoredSettings() })
+    void getActiveTab().then(setActiveTab)
+    const unsubscribeActiveTab = subscribeToActiveTab(setActiveTab)
+    return () => {
+      unsubscribe()
+      unsubscribeActiveTab()
+    }
+  }, [refreshStoredSettings])
+
   const persist = useCallback(async (next: AppData) => {
-    setData(next)
     await saveAppData(next)
+    setData(next)
   }, [])
+
+  const invalidateLinkedThoughtsForUrl = useCallback((url: string | undefined) => {
+    linkedThoughtsLoader.invalidate(url)
+  }, [linkedThoughtsLoader])
 
   const saveCapture = useCallback(async () => {
     if (!data || !activeTab) {
@@ -120,7 +162,12 @@ export function App({ surface }: { surface: ChromeSurface }) {
       memories: [memory, ...data.memories],
       sync: { ...data.sync, outbox: [outboxItem, ...data.sync.outbox] }
     }
-    await persist(saved)
+    try {
+      await persist(saved)
+    } catch {
+      setStatus('이 기기에 기록을 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      return
+    }
     setNote('')
 
     if (!saved.sync.endpointUrl || !apiToken) {
@@ -129,6 +176,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
     }
 
     const result = await postCapture({ endpointUrl: saved.sync.endpointUrl, apiToken }, outboxItem.capture)
+    if (result.ok) invalidateLinkedThoughtsForUrl(outboxItem.capture.data.context?.browser?.url)
     const next: AppData = {
       ...saved,
       sync: {
@@ -138,12 +186,20 @@ export function App({ surface }: { surface: ChromeSurface }) {
           : saved.sync.outbox.map((item) => item.capture.id === outboxItem.capture.id ? { ...item, lastError: result.error } : item)
       }
     }
-    await persist(next)
+    try {
+      await persist(next)
+    } catch {
+      setStatus(result.ok
+        ? '서버에는 기록했지만 이 기기의 상태를 저장하지 못했습니다. 다시 열어 전송 대기를 확인해 주세요.'
+        : '전송 대기 상태를 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      return
+    }
     setStatus(result.ok ? 'Context Server에 기록했습니다.' : `로컬에 저장했습니다. 전송 대기: ${result.error}`)
-  }, [activeTab, apiToken, data, note, persist])
+  }, [activeTab, apiToken, data, invalidateLinkedThoughtsForUrl, note, persist])
 
   const selectDeploymentMode = (mode: DeploymentMode) => {
     if (mode === deploymentMode) return
+    settingsDirtyRef.current = true
     setDeploymentMode(mode)
     setEndpoint('')
     setApiToken('')
@@ -152,19 +208,58 @@ export function App({ surface }: { surface: ChromeSurface }) {
     setStatus('')
   }
 
+  const markSettingsDirty = () => {
+    settingsDirtyRef.current = true
+  }
+
+  const markBrainSettingsDirty = () => {
+    brainSettingsDirtyRef.current = true
+    markSettingsDirty()
+  }
+
+  const openSettings = () => {
+    settingsDirtyRef.current = false
+    brainSettingsDirtyRef.current = false
+    setSettingsChangedElsewhere(false)
+    setScreen('settings')
+  }
+
+  const reloadSettingsForm = () => {
+    settingsDirtyRef.current = false
+    brainSettingsDirtyRef.current = false
+    setSettingsChangedElsewhere(false)
+    void refreshStoredSettings({ replaceSettingsForm: true })
+  }
+
+  const updateDeveloperMode = async (developerMode: boolean) => {
+    if (!data) return
+    try {
+      await persist({ ...data, sync: { ...data.sync, developerMode } })
+    } catch {
+      setStatus('개발자 모드 변경을 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+    }
+  }
+
   const startLocalMode = async () => {
     if (!data) return
     const next: AppData = {
       ...data,
       sync: { ...data.sync, mode: 'local', setupComplete: true, endpointUrl: '' }
     }
-    await Promise.all([persist(next), saveApiToken('')])
-    setDeploymentMode('local')
-    setEndpoint('')
-    setApiToken('')
-    setTokenInput('')
-    setStatus('이 기기에만 기록을 저장합니다. Raycast와 함께 쓰려면 연결 설정에서 로컬 Context Server를 추가하세요.')
-    setScreen('capture')
+    try {
+      await saveStoredSettings({ data: next, apiToken: '', brainApiToken })
+      setData(next)
+      setDeploymentMode('local')
+      setEndpoint('')
+      setApiToken('')
+      setTokenInput('')
+      settingsDirtyRef.current = false
+      brainSettingsDirtyRef.current = false
+      setStatus('이 기기에만 기록을 저장합니다. Raycast와 함께 쓰려면 연결 설정에서 로컬 Context Server를 추가하세요.')
+      setScreen('capture')
+    } catch {
+      setStatus('로컬 모드 설정을 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+    }
   }
 
   const saveSettings = async () => {
@@ -185,11 +280,8 @@ export function App({ surface }: { surface: ChromeSurface }) {
         ...data,
         sync: { ...data.sync, mode: deploymentMode, setupComplete: true, endpointUrl, brainEndpointUrl }
       }
-      await Promise.all([
-        persist(next),
-        saveApiToken(nextApiToken),
-        saveBrainApiToken(nextBrainApiToken)
-      ])
+      await saveStoredSettings({ data: next, apiToken: nextApiToken, brainApiToken: nextBrainApiToken })
+      setData(next)
       setApiToken(nextApiToken)
       setTokenInput('')
       setEndpoint(endpointUrl)
@@ -200,6 +292,8 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setStatus(endpointUrl && nextApiToken
         ? deploymentMode === 'local' ? '로컬 Context Server 연결 설정을 저장했습니다.' : 'Cloudflare D1 연결 설정을 저장했습니다.'
         : '이 기기에만 기록을 저장합니다. 필요할 때 로컬 Context Server를 연결할 수 있습니다.')
+      settingsDirtyRef.current = false
+      brainSettingsDirtyRef.current = false
       setScreen('capture')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : '서버 주소를 확인해 주세요.')
@@ -224,12 +318,14 @@ export function App({ surface }: { surface: ChromeSurface }) {
         ...data,
         sync: { ...data.sync, mode: deploymentMode, setupComplete: true, endpointUrl }
       }
-      await Promise.all([persist(next), saveApiToken(nextApiToken)])
+      await saveStoredSettings({ data: next, apiToken: nextApiToken, brainApiToken })
+      setData(next)
       setEndpoint(endpointUrl)
       setApiToken(nextApiToken)
       setTokenInput('')
       setConnectionStatus('연결을 확인하고 저장했습니다. API token에 read 권한이 있습니다.')
       setStatus(deploymentMode === 'local' ? '로컬 Context Server 연결 설정을 저장했습니다.' : 'Cloudflare D1 연결 설정을 저장했습니다.')
+      settingsDirtyRef.current = brainSettingsDirtyRef.current
     } catch (error) {
       setConnectionStatus(error instanceof Error ? error.message : '연결 설정을 저장하지 못했습니다.')
     } finally {
@@ -238,18 +334,28 @@ export function App({ surface }: { surface: ChromeSurface }) {
   }
 
   const clearApiToken = async () => {
-    await saveApiToken('')
-    setApiToken('')
-    setTokenInput('')
-    setConnectionStatus('')
-    setStatus('API token을 삭제했습니다. 로컬 저장은 계속 사용할 수 있습니다.')
+    if (!data) return
+    try {
+      await saveStoredSettings({ data, apiToken: '', brainApiToken })
+      setApiToken('')
+      setTokenInput('')
+      setConnectionStatus('')
+      setStatus('API token을 삭제했습니다. 로컬 저장은 계속 사용할 수 있습니다.')
+    } catch {
+      setStatus('API token을 삭제하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+    }
   }
 
   const clearBrainApiToken = async () => {
-    await saveBrainApiToken('')
-    setBrainApiToken('')
-    setBrainTokenInput('')
-    setStatus('Brain Server API token을 삭제했습니다.')
+    if (!data) return
+    try {
+      await saveStoredSettings({ data, apiToken, brainApiToken: '' })
+      setBrainApiToken('')
+      setBrainTokenInput('')
+      setStatus('Brain Server API token을 삭제했습니다.')
+    } catch {
+      setStatus('Brain Server API token을 삭제하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+    }
   }
 
   const retryPending = async () => {
@@ -258,15 +364,23 @@ export function App({ surface }: { surface: ChromeSurface }) {
     const results = await Promise.all(data.sync.outbox.map(async (item) => ({ item, result: await postCapture(config, item.capture) })))
     const succeeded = new Set(results.filter(({ result }) => result.ok).map(({ item }) => item.capture.id))
     const failed = new Map(results.filter(({ result }) => !result.ok).map(({ item, result }) => [item.capture.id, result.ok ? '' : result.error]))
-    await persist({
-      ...data,
-      sync: {
-        ...data.sync,
-        outbox: data.sync.outbox
-          .filter((item) => !succeeded.has(item.capture.id))
-          .map((item) => failed.has(item.capture.id) ? { ...item, lastError: failed.get(item.capture.id) } : item)
-      }
-    })
+    for (const { item, result } of results) {
+      if (result.ok) invalidateLinkedThoughtsForUrl(item.capture.data.context?.browser?.url)
+    }
+    try {
+      await persist({
+        ...data,
+        sync: {
+          ...data.sync,
+          outbox: data.sync.outbox
+            .filter((item) => !succeeded.has(item.capture.id))
+            .map((item) => failed.has(item.capture.id) ? { ...item, lastError: failed.get(item.capture.id) } : item)
+        }
+      })
+    } catch {
+      setStatus('전송 결과를 이 기기에 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      return
+    }
     setStatus(succeeded.size === results.length ? '대기 중인 기록을 모두 전송했습니다.' : `${succeeded.size}건 전송, ${results.length - succeeded.size}건 대기 중입니다.`)
   }
 
@@ -287,25 +401,40 @@ export function App({ surface }: { surface: ChromeSurface }) {
     }
   }, [apiToken, data])
 
-  const loadLinkedThoughts = useCallback(async (url: string) => {
-    if (!data?.sync.endpointUrl || !apiToken) {
-      setLinkedThoughts([])
-      return
+  const linkedEndpointUrl = data?.sync.endpointUrl ?? ''
+
+  const loadLinkedThoughts = useCallback(async (url: string, signal: AbortSignal) => {
+    if (!linkedEndpointUrl || !apiToken) {
+      return { ok: false as const }
     }
-    const result = await listRemoteCaptures({ endpointUrl: data.sync.endpointUrl, apiToken })
-    setLinkedThoughts(result.ok ? result.captures.filter((thought) => thought.data.context?.browser?.url === url) : [])
-  }, [apiToken, data])
+    const result = await listRemoteCaptures({ endpointUrl: linkedEndpointUrl, apiToken }, { url, signal })
+    return result.ok
+      ? { ok: true as const, captures: filterLinkedThoughtsForUrl(result.captures, url) }
+      : { ok: false as const }
+  }, [apiToken, linkedEndpointUrl])
+
+  useEffect(() => {
+    linkedThoughtsLoader.reset()
+    setLinkedThoughts([])
+  }, [apiToken, linkedEndpointUrl, linkedThoughtsLoader])
+
+  useEffect(() => () => linkedThoughtsLoader.cancel(), [linkedThoughtsLoader])
 
   useEffect(() => {
     const currentUrl = activeTab?.url
-    if (!currentUrl) return
+    if (!currentUrl) {
+      linkedThoughtsLoader.cancel()
+      setLinkedThoughts([])
+      return
+    }
     if (activeTabUrlRef.current && activeTabUrlRef.current !== currentUrl && noteRef.current) {
       setNote('')
       setStatus('현재 링크가 바뀌어 작성 중인 메모를 비웠습니다.')
     }
     activeTabUrlRef.current = currentUrl
-    void loadLinkedThoughts(currentUrl)
-  }, [activeTab?.url, loadLinkedThoughts])
+    setLinkedThoughts([])
+    linkedThoughtsLoader.load(currentUrl, loadLinkedThoughts, setLinkedThoughts)
+  }, [activeTab?.url, linkedThoughtsLoader, loadLinkedThoughts])
 
   const openThoughts = () => {
     setThoughtUrlFilter('')
@@ -383,6 +512,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
     if (!window.confirm('이 Record를 Context Server에서 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return
     const result = await deleteRemoteCapture({ endpointUrl: data.sync.endpointUrl, apiToken }, thought.id)
     if (result.ok) {
+      invalidateLinkedThoughtsForUrl(thought.data.context?.browser?.url)
       setThoughts((current) => current.filter((item) => item.id !== thought.id))
       setThoughtStatus('Record를 삭제했습니다.')
     } else {
@@ -406,7 +536,20 @@ export function App({ surface }: { surface: ChromeSurface }) {
     }
   }
 
-  if (!data) return <main className="capture-shell"><p>Context OS를 여는 중…</p></main>
+  if (storageLoadState === 'error') {
+    return (
+      <main className="capture-shell">
+        <section className="capture-card storage-error" role="alert">
+          <p className="eyebrow">Storage protection</p>
+          <h1>저장된 설정을 열지 못했습니다</h1>
+          <p>{storageError}</p>
+          <button className="primary-button" type="button" onClick={() => void refreshStoredSettings({ initial: true, replaceSettingsForm: true })}>다시 시도</button>
+        </section>
+      </main>
+    )
+  }
+
+  if (storageLoadState !== 'ready' || !data) return <main className="capture-shell"><p>Context OS를 여는 중…</p></main>
 
   const canCapture = !activeTab || canCaptureOnUrl(activeTab.url)
   const visibleThoughts = thoughts.filter((thought) =>
@@ -433,6 +576,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
               <span><strong>Cloudflare D1 연결</strong><small>내 Cloudflare Worker URL과 API token을 입력해 여러 클라이언트에서 기록을 사용합니다.</small></span>
             </button>
           </div>
+          <p className="help-text">이전 버전에서 연결이 초기화되었다면 Cloudflare 주소와 token을 한 번 다시 입력해 주세요.</p>
         </section>
       ) : screen === 'settings' ? (
         <section className="capture-card" aria-labelledby="settings-title">
@@ -440,6 +584,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
             <button className="icon-button" type="button" aria-label="메모 화면으로 돌아가기" onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
             <div><p className="eyebrow">Context OS</p><h1 id="settings-title">연결 설정</h1></div>
           </header>
+          {settingsChangedElsewhere ? <div className="settings-conflict" role="status"><span>다른 화면에서 저장된 설정이 있습니다. 현재 입력을 유지하고 있습니다.</span><button type="button" onClick={reloadSettingsForm}>저장값 다시 불러오기</button></div> : null}
           <div className="settings-section-heading"><p className="eyebrow">Storage</p><h2>운영 방식</h2></div>
           <div className="mode-picker" role="radiogroup" aria-label="운영 방식">
             <label className={`mode-option ${deploymentMode === 'local' ? 'is-selected' : ''}`}>
@@ -458,14 +603,14 @@ export function App({ surface }: { surface: ChromeSurface }) {
             : 'Cloudflare에 배포한 내 Context Server URL과 read/write API token을 입력합니다.'}</p>
           <label className="capture-field">
             <span>{deploymentMode === 'local' ? '로컬 Context Server 주소 (선택)' : 'Cloudflare Context Server 주소'}</span>
-            <input value={endpoint} onChange={(event) => { setEndpoint(event.target.value); setConnectionStatus('') }} placeholder={deploymentMode === 'local' ? 'http://127.0.0.1:8787' : 'https://context.example.com'} inputMode="url" />
+            <input value={endpoint} onChange={(event) => { markSettingsDirty(); setEndpoint(event.target.value); setConnectionStatus('') }} placeholder={deploymentMode === 'local' ? 'http://127.0.0.1:8787' : 'https://context.example.com'} inputMode="url" />
           </label>
           <label className="capture-field settings-token-field">
             <span>API token</span>
             <input
               type="password"
               value={tokenInput}
-              onChange={(event) => { setTokenInput(event.target.value); setConnectionStatus('') }}
+              onChange={(event) => { markSettingsDirty(); setTokenInput(event.target.value); setConnectionStatus('') }}
               placeholder={apiToken ? '설정됨 — 변경할 때만 입력' : 'Read/write API token'}
               autoComplete="new-password"
               spellCheck={false}
@@ -480,14 +625,14 @@ export function App({ surface }: { surface: ChromeSurface }) {
           <div className="settings-section-heading"><p className="eyebrow">Intelligence</p><h2>Brain Server</h2></div>
           <label className="capture-field">
             <span>Brain Server 주소</span>
-            <input value={brainEndpoint} onChange={(event) => setBrainEndpoint(event.target.value)} placeholder="http://127.0.0.1:8788" inputMode="url" />
+            <input value={brainEndpoint} onChange={(event) => { markBrainSettingsDirty(); setBrainEndpoint(event.target.value) }} placeholder="http://127.0.0.1:8788" inputMode="url" />
           </label>
           <label className="capture-field settings-token-field">
             <span>Brain Server API token</span>
             <input
               type="password"
               value={brainTokenInput}
-              onChange={(event) => setBrainTokenInput(event.target.value)}
+              onChange={(event) => { markBrainSettingsDirty(); setBrainTokenInput(event.target.value) }}
               placeholder={brainApiToken ? '설정됨 — 변경할 때만 입력' : '선택 사항'}
               autoComplete="new-password"
               spellCheck={false}
@@ -499,7 +644,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
             <input
               type="checkbox"
               checked={data.sync.developerMode}
-              onChange={(event) => void persist({ ...data, sync: { ...data.sync, developerMode: event.target.checked } })}
+              onChange={(event) => void updateDeveloperMode(event.target.checked)}
             />
             <span><strong>개발자 모드</strong>테스트·Mock Record 삭제 버튼을 표시합니다.</span>
           </label>
@@ -580,7 +725,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
         <section className="capture-card" aria-labelledby="capture-title">
           <header className="capture-header">
             <div><p className="eyebrow">Context OS</p><h1 id="capture-title">생각 남기기</h1></div>
-            <div className="header-actions"><button className="summary-entry-button" type="button" onClick={openSummary}><Sparkles size={15} />오늘 요약</button><button className="icon-button" type="button" aria-label="생각 전체 조회" onClick={openThoughts}><Search size={17} /></button><button className="icon-button" type="button" aria-label="연결 설정" onClick={() => setScreen('settings')}><Settings size={17} /></button></div>
+            <div className="header-actions"><button className="summary-entry-button" type="button" onClick={openSummary}><Sparkles size={15} />오늘 요약</button><button className="icon-button" type="button" aria-label="생각 전체 조회" onClick={openThoughts}><Search size={17} /></button><button className="icon-button" type="button" aria-label="연결 설정" onClick={openSettings}><Settings size={17} /></button></div>
           </header>
           <div className="source-row">
             <Link2 size={17} aria-hidden="true" />
