@@ -1,0 +1,38 @@
+{
+  "name": "context-os-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source Context OS clients and server.",
+  "license": "MIT",
+  "packageManager": "pnpm@11.21.0",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.21.0"
+    }
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "verify": "turbo run lint typecheck test build",
+    "dev:chrome": "pnpm --filter context-shelf dev",
+    "dev:raycast": "pnpm --filter context-os dev",
+    "dev:server": "pnpm --filter server-context dev",
+    "dev:brain": "pnpm --filter server-brain dev",
+    "build:chrome": "pnpm --filter context-shelf build",
+    "build:raycast": "pnpm --filter context-os build",
+    "build:brain": "pnpm --filter server-brain build",
+    "server:migrate:local": "pnpm --filter server-context db:migrate:local",
+    "server:migrate:remote": "pnpm --filter server-context db:migrate:remote",
+    "server:deploy": "pnpm --filter server-context run deploy",
+    "server:token:create": "pnpm --filter server-context token:create",
+    "server:token:list": "pnpm --filter server-context token:list",
+    "server:token:revoke": "pnpm --filter server-context token:revoke"
+  },
+  "devDependencies": {
+    "turbo": "2.10.9"
+  }
+}

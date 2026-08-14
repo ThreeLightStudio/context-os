@@ -1,0 +1,27 @@
+{
+  "name": "server-context",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Context OS capture API, backed by Cloudflare Workers and D1.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply db-context --local",
+    "db:migrate:remote": "wrangler d1 migrations apply db-context --remote",
+    "token:create": "node scripts/manage-tokens.mjs create",
+    "token:revoke": "node scripts/manage-tokens.mjs revoke",
+    "token:list": "node scripts/manage-tokens.mjs list",
+    "import:context-export": "node scripts/import-context-export.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260724.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.30.0"
+  }
+}

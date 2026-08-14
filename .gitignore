@@ -1,0 +1,27 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.pnp.*
+
+# Build and task-runner output
+dist/
+.turbo/
+coverage/
+
+# Cloudflare local state and private configuration
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+apps/server-context/wrangler.jsonc
+
+# Local agent/editor state
+.serena/
+.agents/
+.codex/
+.DS_Store
+
+# Local exports and captured data
+context-export*.md
+*.capture.json

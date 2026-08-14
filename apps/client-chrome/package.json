@@ -1,0 +1,31 @@
+{
+  "name": "context-shelf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first Chrome extension for saving and resuming browser work contexts.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "verify": "pnpm typecheck && pnpm test && pnpm build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~6.0.2",
+    "vite": "^6.1.0",
+    "vitest": "^3.2.4"
+  }
+}

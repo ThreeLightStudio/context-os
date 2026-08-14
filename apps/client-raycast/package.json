@@ -1,0 +1,87 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "context-os",
+  "title": "Context OS",
+  "description": "Capture and restore personal context.",
+  "type": "module",
+  "icon": "extension-icon.png",
+  "author": "ThreeLightStudio",
+  "platforms": [
+    "macOS",
+    "Windows"
+  ],
+  "categories": [
+    "Data"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "capture",
+      "title": "Capture",
+      "subtitle": "Capture Thoughts",
+      "description": "Quickly save raw thoughts.",
+      "mode": "view"
+    },
+    {
+      "name": "recent-captures",
+      "title": "Recent Captures",
+      "subtitle": "Review Recent Captures",
+      "description": "Review the latest 100 raw captures.",
+      "mode": "view"
+    },
+    {
+      "name": "remote-records",
+      "title": "Remote Records",
+      "subtitle": "Read Context Server Records",
+      "description": "Read records from a local or Cloudflare Context Server.",
+      "mode": "view"
+    },
+    {
+      "name": "context-settings",
+      "title": "Context Settings",
+      "subtitle": "View Server Connection Settings",
+      "description": "View and verify the local or Cloudflare Context Server connection.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "serverUrl",
+      "title": "Context Server URL",
+      "description": "The local or Cloudflare Context Server base URL (without /v1/records).",
+      "type": "textfield",
+      "required": true,
+      "placeholder": "https://context.example.com"
+    },
+    {
+      "name": "apiToken",
+      "title": "Context Server API Token",
+      "description": "Use one token with both read and write scopes. It is stored as a secret preference.",
+      "type": "password",
+      "required": true,
+      "placeholder": "Read/write API token"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.23",
+    "@raycast/utils": "^1.17.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build --environment dist --output dist",
+    "dev": "ray develop",
+    "fix-lint": "eslint src test --fix && prettier --write src test package.json .prettierrc",
+    "lint": "eslint src test && prettier --check src test package.json .prettierrc",
+    "lint:store": "ray lint",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "prepublishOnly": "echo \"\\n\\nIt seems like you are trying to publish the Raycast extension to npm.\\n\\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\\n\\n\" && exit 1",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}

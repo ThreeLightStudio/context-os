@@ -1,0 +1,21 @@
+{
+  "name": "server-brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first Context OS intelligence and task execution server.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm build && node --env-file-if-exists=.env --watch dist/index.js",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
