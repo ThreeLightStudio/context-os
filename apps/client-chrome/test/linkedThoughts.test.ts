@@ -101,6 +101,29 @@ describe('LinkedThoughtsLoader', () => {
     expect(visible).toEqual(['https://cached.test', 'https://cached.test', 'https://cached.test', 'https://cached.test', 'https://cached.test'])
   })
 
+  it('refreshes a URL and replaces the visible captures with the latest result', async () => {
+    vi.useFakeTimers()
+    const loader = new LinkedThoughtsLoader({ debounceMs: 1 })
+    let version = 0
+    const fetcher = vi.fn(async (url: string): Promise<LinkedThoughtsLoadResult> => ({
+      ok: true,
+      captures: [capture(`${url}-${++version}`)]
+    }))
+    const visible: string[] = []
+    const onResult = (captures: ReturnType<typeof capture>[]) => visible.push(captures[0]?.id ?? 'empty')
+
+    loader.load('https://refresh.test', fetcher, onResult)
+    vi.advanceTimersByTime(1)
+    await flushPromises()
+
+    loader.refresh('https://refresh.test', fetcher, onResult)
+    vi.advanceTimersByTime(1)
+    await flushPromises()
+
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(visible).toEqual(['https://refresh.test-1', 'https://refresh.test-2'])
+  })
+
   it('does not cache failed lookups', async () => {
     vi.useFakeTimers()
     const loader = new LinkedThoughtsLoader({ debounceMs: 1 })

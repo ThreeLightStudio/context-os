@@ -117,9 +117,26 @@ export function App({ surface }: { surface: ChromeSurface }) {
     setData(next)
   }, [])
 
-  const invalidateLinkedThoughtsForUrl = useCallback((url: string | undefined) => {
+  const linkedEndpointUrl = data?.sync.endpointUrl ?? ''
+
+  const loadLinkedThoughts = useCallback(async (url: string, signal: AbortSignal) => {
+    if (!linkedEndpointUrl || !apiToken) {
+      return { ok: false as const }
+    }
+    const result = await listRemoteCaptures({ endpointUrl: linkedEndpointUrl, apiToken }, { url, signal })
+    return result.ok
+      ? { ok: true as const, captures: filterLinkedThoughtsForUrl(result.captures, url) }
+      : { ok: false as const }
+  }, [apiToken, linkedEndpointUrl])
+
+  const refreshLinkedThoughtsForUrl = useCallback((url: string | undefined) => {
+    if (!url) return
+    if (activeTab?.url === url) {
+      linkedThoughtsLoader.refresh(url, loadLinkedThoughts, setLinkedThoughts)
+      return
+    }
     linkedThoughtsLoader.invalidate(url)
-  }, [linkedThoughtsLoader])
+  }, [activeTab?.url, linkedThoughtsLoader, loadLinkedThoughts])
 
   const saveCapture = useCallback(async () => {
     if (!data || !activeTab) {
@@ -176,7 +193,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
     }
 
     const result = await postCapture({ endpointUrl: saved.sync.endpointUrl, apiToken }, outboxItem.capture)
-    if (result.ok) invalidateLinkedThoughtsForUrl(outboxItem.capture.data.context?.browser?.url)
+    if (result.ok) refreshLinkedThoughtsForUrl(outboxItem.capture.data.context?.browser?.url)
     const next: AppData = {
       ...saved,
       sync: {
@@ -195,7 +212,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
       return
     }
     setStatus(result.ok ? 'Context Server에 기록했습니다.' : `로컬에 저장했습니다. 전송 대기: ${result.error}`)
-  }, [activeTab, apiToken, data, invalidateLinkedThoughtsForUrl, note, persist])
+  }, [activeTab, apiToken, data, note, persist, refreshLinkedThoughtsForUrl])
 
   const selectDeploymentMode = (mode: DeploymentMode) => {
     if (mode === deploymentMode) return
@@ -365,7 +382,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
     const succeeded = new Set(results.filter(({ result }) => result.ok).map(({ item }) => item.capture.id))
     const failed = new Map(results.filter(({ result }) => !result.ok).map(({ item, result }) => [item.capture.id, result.ok ? '' : result.error]))
     for (const { item, result } of results) {
-      if (result.ok) invalidateLinkedThoughtsForUrl(item.capture.data.context?.browser?.url)
+      if (result.ok) refreshLinkedThoughtsForUrl(item.capture.data.context?.browser?.url)
     }
     try {
       await persist({
@@ -400,18 +417,6 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setThoughtStatus(`생각을 불러오지 못했습니다: ${result.error}`)
     }
   }, [apiToken, data])
-
-  const linkedEndpointUrl = data?.sync.endpointUrl ?? ''
-
-  const loadLinkedThoughts = useCallback(async (url: string, signal: AbortSignal) => {
-    if (!linkedEndpointUrl || !apiToken) {
-      return { ok: false as const }
-    }
-    const result = await listRemoteCaptures({ endpointUrl: linkedEndpointUrl, apiToken }, { url, signal })
-    return result.ok
-      ? { ok: true as const, captures: filterLinkedThoughtsForUrl(result.captures, url) }
-      : { ok: false as const }
-  }, [apiToken, linkedEndpointUrl])
 
   useEffect(() => {
     linkedThoughtsLoader.reset()
@@ -512,7 +517,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
     if (!window.confirm('이 Record를 Context Server에서 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return
     const result = await deleteRemoteCapture({ endpointUrl: data.sync.endpointUrl, apiToken }, thought.id)
     if (result.ok) {
-      invalidateLinkedThoughtsForUrl(thought.data.context?.browser?.url)
+      refreshLinkedThoughtsForUrl(thought.data.context?.browser?.url)
       setThoughts((current) => current.filter((item) => item.id !== thought.id))
       setThoughtStatus('Record를 삭제했습니다.')
     } else {

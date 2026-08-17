@@ -80,6 +80,11 @@ export class LinkedThoughtsLoader {
     if (url) this.cache.delete(url)
   }
 
+  refresh(url: string, fetcher: LinkedThoughtsFetcher, onResult: (captures: RemoteCapture[]) => void) {
+    this.invalidate(url)
+    this.load(url, fetcher, onResult)
+  }
+
   reset() {
     this.cancel()
     this.cache.clear()
