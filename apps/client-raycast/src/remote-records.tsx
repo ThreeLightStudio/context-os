@@ -1,20 +1,23 @@
 import { Action, ActionPanel, Detail, Icon, List, getPreferenceValues, showToast, Toast } from "@raycast/api";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getI18n, RaycastLocalePreferences } from "./i18n";
 import { fetchRemoteRecordsPage, RemoteRecord, RemoteRecordsError, RecordsPage } from "./remote-records-api";
 
-interface RemotePreferences {
+type I18n = ReturnType<typeof getI18n>;
+
+interface RemotePreferences extends RaycastLocalePreferences {
   serverUrl?: string;
   apiToken?: string;
 }
 
-function formatTimestamp(value: string) {
+function formatTimestamp(value: string, i18n: I18n) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : i18n.formatDate(date, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function previewFor(value: string) {
+function previewFor(value: string, i18n: I18n) {
   const preview = value.replace(/\s+/g, " ").trim();
-  if (!preview) return "Empty capture";
+  if (!preview) return i18n.t("remote.emptyCapture");
   return preview.length > 160 ? `${preview.slice(0, 157)}…` : preview;
 }
 
@@ -42,12 +45,12 @@ function metadataFor(record: RemoteRecord) {
   );
 }
 
-function RefreshAction({ onRefresh }: { onRefresh: () => void }) {
-  return <Action title="Refresh" icon={Icon.ArrowClockwise} onAction={onRefresh} />;
+function RefreshAction({ onRefresh, i18n }: { onRefresh: () => void; i18n: I18n }) {
+  return <Action title={i18n.t("remote.refresh")} icon={Icon.ArrowClockwise} onAction={onRefresh} />;
 }
 
-function LoadMoreAction({ onLoadMore }: { onLoadMore: () => void }) {
-  return <Action title="Load More" icon={Icon.ArrowDown} onAction={onLoadMore} />;
+function LoadMoreAction({ onLoadMore, i18n }: { onLoadMore: () => void; i18n: I18n }) {
+  return <Action title={i18n.t("remote.loadMore")} icon={Icon.ArrowDown} onAction={onLoadMore} />;
 }
 
 function RemoteRecordDetail({
@@ -55,29 +58,31 @@ function RemoteRecordDetail({
   onRefresh,
   onLoadMore,
   canLoadMore,
+  i18n,
 }: {
   record: RemoteRecord;
   onRefresh: () => void;
   onLoadMore: () => void;
   canLoadMore: boolean;
+  i18n: I18n;
 }) {
   return (
     <Detail
       markdown={`## Content\n\n${safeMarkdownCodeBlock(record.data.content)}\n\n## Metadata\n\n${safeMarkdownCodeBlock(metadataFor(record))}`}
       metadata={
         <Detail.Metadata>
-          <Detail.Metadata.Label title="Recorded" text={formatTimestamp(record.recordedAt)} />
-          <Detail.Metadata.Label title="Received" text={formatTimestamp(record.receivedAt)} />
-          <Detail.Metadata.Label title="Source client" text={record.data.source.client} />
-          <Detail.Metadata.Label title="Schema version" text={String(record.schemaVersion)} />
-          <Detail.Metadata.Label title="Record ID" text={record.id} />
+          <Detail.Metadata.Label title={i18n.t("remote.recorded")} text={formatTimestamp(record.recordedAt, i18n)} />
+          <Detail.Metadata.Label title={i18n.t("remote.received")} text={formatTimestamp(record.receivedAt, i18n)} />
+          <Detail.Metadata.Label title={i18n.t("remote.sourceClient")} text={record.data.source.client} />
+          <Detail.Metadata.Label title={i18n.t("remote.schemaVersion")} text={String(record.schemaVersion)} />
+          <Detail.Metadata.Label title={i18n.t("remote.recordId")} text={record.id} />
         </Detail.Metadata>
       }
       actions={
         <ActionPanel>
-          <Action.CopyToClipboard title="Copy Content" content={record.data.content} />
-          {canLoadMore && <LoadMoreAction onLoadMore={onLoadMore} />}
-          <RefreshAction onRefresh={onRefresh} />
+          <Action.CopyToClipboard title={i18n.t("remote.copyContent")} content={record.data.content} />
+          {canLoadMore && <LoadMoreAction onLoadMore={onLoadMore} i18n={i18n} />}
+          <RefreshAction onRefresh={onRefresh} i18n={i18n} />
         </ActionPanel>
       }
     />
@@ -105,6 +110,7 @@ function messageForError(error: RemoteRecordsError) {
 
 export function RemoteRecordsCommand() {
   const preferences = getPreferenceValues<RemotePreferences>();
+  const i18n = useMemo(() => getI18n(preferences), [preferences.language]);
   const serverUrl = preferences.serverUrl?.trim() ?? "";
   const apiToken = preferences.apiToken?.trim() ?? "";
   const [records, setRecords] = useState<RemoteRecord[]>([]);
@@ -126,9 +132,7 @@ export function RemoteRecordsCommand() {
       if (!serverUrl || !apiToken) {
         setRecords([]);
         setNextCursor(null);
-        setError(
-          new RemoteRecordsError("configuration", "Set the Context Server URL and API token in Raycast Preferences."),
-        );
+        setError(new RemoteRecordsError("configuration", i18n.t("connection.requiredDetail")));
         setIsLoading(false);
         return;
       }
@@ -149,13 +153,13 @@ export function RemoteRecordsCommand() {
         const remoteError =
           reason instanceof RemoteRecordsError
             ? reason
-            : new RemoteRecordsError("network", "Could not load remote records. Try again.");
+            : new RemoteRecordsError("network", i18n.t("remote.loadFailed"));
         if (remoteError.code === "aborted") return;
         setError(remoteError);
         if (append) {
           await showToast({
             style: Toast.Style.Failure,
-            title: "Could not load more records",
+            title: i18n.t("remote.loadMoreFailed"),
             message: remoteError.message,
           });
         }
@@ -163,7 +167,7 @@ export function RemoteRecordsCommand() {
         if (currentRequestId === requestId.current) setIsLoading(false);
       }
     },
-    [apiToken, serverUrl],
+    [apiToken, i18n, serverUrl],
   );
 
   const refresh = useCallback(() => loadPage(undefined, false), [loadPage]);
@@ -181,25 +185,25 @@ export function RemoteRecordsCommand() {
 
   const emptyActions = (
     <ActionPanel>
-      <RefreshAction onRefresh={() => void refresh()} />
-      {nextCursor && <LoadMoreAction onLoadMore={() => void loadMore()} />}
+      <RefreshAction onRefresh={() => void refresh()} i18n={i18n} />
+      {nextCursor && <LoadMoreAction onLoadMore={() => void loadMore()} i18n={i18n} />}
     </ActionPanel>
   );
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search remote records">
+    <List isLoading={isLoading} searchBarPlaceholder={i18n.t("remote.search")}>
       {error && records.length === 0 ? (
         <List.EmptyView
           icon={error.code === "configuration" ? Icon.Gear : Icon.ExclamationMark}
-          title="Could not load remote records"
+          title={i18n.t("remote.loadFailed")}
           description={messageForError(error)}
           actions={emptyActions}
         />
       ) : records.length === 0 && !isLoading ? (
         <List.EmptyView
           icon={Icon.Document}
-          title="No remote records"
-          description="The Context Server returned no records."
+          title={i18n.t("remote.noRecords")}
+          description={i18n.t("remote.noRecordsHelp")}
           actions={emptyActions}
         />
       ) : (
@@ -208,25 +212,26 @@ export function RemoteRecordsCommand() {
             <List.Item
               key={record.id}
               icon={Icon.Document}
-              title={previewFor(record.data.content)}
+              title={previewFor(record.data.content, i18n)}
               subtitle={record.data.source.client}
-              accessories={[{ text: formatTimestamp(record.recordedAt) }]}
+              accessories={[{ text: formatTimestamp(record.recordedAt, i18n) }]}
               actions={
                 <ActionPanel>
                   <Action.Push
-                    title="Open Record"
+                    title={i18n.t("remote.openRecord")}
                     target={
                       <RemoteRecordDetail
                         record={record}
                         onRefresh={() => void refresh()}
                         onLoadMore={() => void loadMore()}
                         canLoadMore={Boolean(nextCursor)}
+                        i18n={i18n}
                       />
                     }
                   />
-                  <Action.CopyToClipboard title="Copy Content" content={record.data.content} />
-                  {nextCursor && <LoadMoreAction onLoadMore={() => void loadMore()} />}
-                  <RefreshAction onRefresh={() => void refresh()} />
+                  <Action.CopyToClipboard title={i18n.t("remote.copyContent")} content={record.data.content} />
+                  {nextCursor && <LoadMoreAction onLoadMore={() => void loadMore()} i18n={i18n} />}
+                  <RefreshAction onRefresh={() => void refresh()} i18n={i18n} />
                 </ActionPanel>
               }
             />
@@ -235,12 +240,12 @@ export function RemoteRecordsCommand() {
             <List.Item
               key="load-more"
               icon={Icon.ArrowDown}
-              title="Load more records"
-              subtitle="Fetch the next page from Context Server"
+              title={i18n.t("remote.loadMoreRecords")}
+              subtitle={i18n.t("remote.loadMoreSubtitle")}
               actions={
                 <ActionPanel>
-                  <LoadMoreAction onLoadMore={() => void loadMore()} />
-                  <RefreshAction onRefresh={() => void refresh()} />
+                  <LoadMoreAction onLoadMore={() => void loadMore()} i18n={i18n} />
+                  <RefreshAction onRefresh={() => void refresh()} i18n={i18n} />
                 </ActionPanel>
               }
             />

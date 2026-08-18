@@ -4,6 +4,7 @@ import {
   Clipboard,
   Detail,
   Form,
+  getPreferenceValues,
   Icon,
   List,
   showToast,
@@ -14,6 +15,9 @@ import { useLocalStorage } from "@raycast/utils";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { parseContextCapture } from "./capture-metadata";
 import { Capture, contextEventPrefix, listAllCaptures, listAllRecentCaptures, listRecentCaptures } from "./database";
+import { getI18n, MessageKey, RaycastLocalePreferences } from "./i18n";
+
+type I18n = ReturnType<typeof getI18n>;
 
 type ContextEventType =
   "work-created" | "work-activated" | "resume-note-set" | "legacy-work-item" | "legacy-migration-completed";
@@ -30,12 +34,12 @@ interface CapturePresentation {
   icon: Icon;
 }
 
-const eventTitles: Record<ContextEventType, string> = {
-  "work-created": "Work 시작",
-  "work-activated": "현재 Work 변경",
-  "resume-note-set": "재개 메모",
-  "legacy-work-item": "기존 단계 기록",
-  "legacy-migration-completed": "기존 기록 이관 완료",
+const eventTitleKeys: Record<ContextEventType, MessageKey> = {
+  "work-created": "recent.eventWorkCreated",
+  "work-activated": "recent.eventWorkActivated",
+  "resume-note-set": "recent.eventResumeNote",
+  "legacy-work-item": "recent.eventLegacyWork",
+  "legacy-migration-completed": "recent.eventLegacyMigration",
 };
 
 const eventIcons: Record<ContextEventType, Icon> = {
@@ -46,41 +50,39 @@ const eventIcons: Record<ContextEventType, Icon> = {
   "legacy-migration-completed": Icon.CheckCircle,
 };
 
-function formatTimestamp(value: string) {
+function formatTimestamp(value: string, i18n: I18n) {
   const date = new Date(value);
-  const pad = (number: number) => String(number).padStart(2, "0");
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return Number.isNaN(date.getTime()) ? value : i18n.formatDate(date, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function contextText(captures: Capture[]) {
+function contextText(captures: Capture[], i18n: I18n) {
   return [
-    "# Context Export",
-    ...captures.flatMap((capture) => ["", `## ${formatTimestamp(capture.capturedAt)}`, "", capture.content]),
+    `# ${i18n.t("recent.contextExport")}`,
+    ...captures.flatMap((capture) => ["", `## ${formatTimestamp(capture.capturedAt, i18n)}`, "", capture.content]),
   ].join("\n");
 }
 
-async function copyContext(captures: Capture[]) {
+async function copyContext(captures: Capture[], i18n: I18n) {
   if (captures.length === 0) {
-    await showToast({ style: Toast.Style.Failure, title: "No captures to copy" });
+    await showToast({ style: Toast.Style.Failure, title: i18n.t("recent.noCapturesToCopy") });
     return;
   }
 
-  await Clipboard.copy(contextText(captures));
+  await Clipboard.copy(contextText(captures, i18n));
   await showToast({
     style: Toast.Style.Success,
-    title: `Copied ${captures.length} capture${captures.length === 1 ? "" : "s"}`,
+    title: i18n.t("recent.copied", { count: captures.length }),
   });
 }
 
-async function copyFullSsot() {
+async function copyFullSsot(i18n: I18n) {
   try {
-    await copyContext(await listAllCaptures());
+    await copyContext(await listAllCaptures(), i18n);
   } catch (reason) {
     await showToast({
       style: Toast.Style.Failure,
-      title: "Could not copy SSOT export",
-      message: reason instanceof Error ? reason.message : "Unable to load captures",
+      title: i18n.t("recent.copyFailed"),
+      message: reason instanceof Error ? reason.message : i18n.t("recent.loadFailed"),
     });
   }
 }
@@ -98,7 +100,7 @@ function startOfToday() {
   return today;
 }
 
-function TimeRangeForm({ captures }: { captures: Capture[] }) {
+function TimeRangeForm({ captures, i18n }: { captures: Capture[]; i18n: I18n }) {
   const { pop } = useNavigation();
   const now = new Date();
 
@@ -107,24 +109,29 @@ function TimeRangeForm({ captures }: { captures: Capture[] }) {
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title="Copy Time Range"
+            title={i18n.t("recent.copyTimeRange")}
             icon={Icon.Clipboard}
             onSubmit={async (values: { start: Date; end: Date }) => {
               if (values.start > values.end) {
-                await showToast({ style: Toast.Style.Failure, title: "Start must be before end" });
+                await showToast({ style: Toast.Style.Failure, title: i18n.t("recent.rangeOrderError") });
                 return;
               }
 
-              await copyContext(capturesSince(captures, values.start, values.end));
+              await copyContext(capturesSince(captures, values.start, values.end), i18n);
               pop();
             }}
           />
         </ActionPanel>
       }
     >
-      <Form.Description text="Copy raw captures created within the selected time range." />
-      <Form.DatePicker id="start" title="From" type={Form.DatePicker.Type.DateTime} defaultValue={startOfToday()} />
-      <Form.DatePicker id="end" title="To" type={Form.DatePicker.Type.DateTime} defaultValue={now} />
+      <Form.Description text={i18n.t("recent.rangeDescription")} />
+      <Form.DatePicker
+        id="start"
+        title={i18n.t("recent.from")}
+        type={Form.DatePicker.Type.DateTime}
+        defaultValue={startOfToday()}
+      />
+      <Form.DatePicker id="end" title={i18n.t("recent.to")} type={Form.DatePicker.Type.DateTime} defaultValue={now} />
     </Form>
   );
 }
@@ -133,36 +140,42 @@ function ExportActions({
   capture,
   visibleCaptures,
   captures,
+  i18n,
 }: {
   capture: Capture;
   visibleCaptures: Capture[];
   captures: Capture[];
+  i18n: I18n;
 }) {
   return (
     <>
-      <Action title="Copy This Capture" icon={Icon.Clipboard} onAction={() => copyContext([capture])} />
-      <Action title="Copy Visible Captures" icon={Icon.Clipboard} onAction={() => copyContext(visibleCaptures)} />
+      <Action title={i18n.t("recent.copyThis")} icon={Icon.Clipboard} onAction={() => copyContext([capture], i18n)} />
       <Action
-        title="Copy Today"
+        title={i18n.t("recent.copyVisible")}
         icon={Icon.Clipboard}
-        onAction={() => copyContext(capturesSince(captures, startOfToday()))}
+        onAction={() => copyContext(visibleCaptures, i18n)}
       />
       <Action
-        title="Copy Last 1 Hour"
+        title={i18n.t("recent.copyToday")}
         icon={Icon.Clipboard}
-        onAction={() => copyContext(capturesSince(captures, new Date(Date.now() - 60 * 60 * 1000)))}
+        onAction={() => copyContext(capturesSince(captures, startOfToday()), i18n)}
       />
       <Action
-        title="Copy Last 24 Hours"
+        title={i18n.t("recent.copyHour")}
         icon={Icon.Clipboard}
-        onAction={() => copyContext(capturesSince(captures, new Date(Date.now() - 24 * 60 * 60 * 1000)))}
+        onAction={() => copyContext(capturesSince(captures, new Date(Date.now() - 60 * 60 * 1000)), i18n)}
       />
-      <Action.Push title="Copy Time Range" icon={Icon.Clipboard} target={<TimeRangeForm captures={captures} />} />
       <Action
-        title="Copy Full SSOT Including Context-OS Events"
+        title={i18n.t("recent.copyDay")}
         icon={Icon.Clipboard}
-        onAction={() => copyFullSsot()}
+        onAction={() => copyContext(capturesSince(captures, new Date(Date.now() - 24 * 60 * 60 * 1000)), i18n)}
       />
+      <Action.Push
+        title={i18n.t("recent.copyTimeRange")}
+        icon={Icon.Clipboard}
+        target={<TimeRangeForm captures={captures} i18n={i18n} />}
+      />
+      <Action title={i18n.t("recent.copyFull")} icon={Icon.Clipboard} onAction={() => copyFullSsot(i18n)} />
     </>
   );
 }
@@ -171,10 +184,12 @@ function CaptureDetail({
   capture,
   visibleCaptures,
   captures,
+  i18n,
 }: {
   capture: Capture;
   visibleCaptures: Capture[];
   captures: Capture[];
+  i18n: I18n;
 }) {
   const parsedCapture = parseContextCapture(capture.content);
   const displayedContent = parsedCapture?.body ?? capture.content;
@@ -188,22 +203,26 @@ function CaptureDetail({
       markdown={rawContent}
       metadata={
         <Detail.Metadata>
-          <Detail.Metadata.Label title="Created" text={new Date(capture.createdAt).toLocaleString()} />
+          <Detail.Metadata.Label title={i18n.t("recent.created")} text={formatTimestamp(capture.createdAt, i18n)} />
         </Detail.Metadata>
       }
       actions={
         <ActionPanel>
-          <ExportActions capture={capture} visibleCaptures={visibleCaptures} captures={captures} />
-          <Action.CopyToClipboard title="Copy Content" content={capture.content} />
-          <Action title="Copy as Context" icon={Icon.Clipboard} onAction={() => copyContext([capture])} />
+          <ExportActions capture={capture} visibleCaptures={visibleCaptures} captures={captures} i18n={i18n} />
+          <Action.CopyToClipboard title={i18n.t("recent.copyContent")} content={capture.content} />
+          <Action
+            title={i18n.t("recent.copyAsContext")}
+            icon={Icon.Clipboard}
+            onAction={() => copyContext([capture], i18n)}
+          />
         </ActionPanel>
       }
     />
   );
 }
 
-function firstLine(value: string) {
-  return value.split(/\r?\n/, 1)[0]?.trim() || "Untitled capture";
+function firstLine(value: string, emptyLabel: string) {
+  return value.split(/\r?\n/, 1)[0]?.trim() || emptyLabel;
 }
 
 function rawEventBody(content: string) {
@@ -224,14 +243,14 @@ function parseContextEvent(capture: Capture): { metadata: ContextEventMetadata; 
 
   try {
     const metadata = JSON.parse(match[1]) as ContextEventMetadata;
-    if (!metadata || !(metadata.type in eventTitles)) return null;
+    if (!metadata || !(metadata.type in eventTitleKeys)) return null;
     return { metadata, body: match[2] };
   } catch {
     return null;
   }
 }
 
-function presentationFor(capture: Capture): CapturePresentation {
+function presentationFor(capture: Capture, i18n: I18n): CapturePresentation {
   const event = parseContextEvent(capture);
   if (!event) {
     const isUnparsedInternalEvent = capture.content.startsWith(contextEventPrefix);
@@ -240,24 +259,28 @@ function presentationFor(capture: Capture): CapturePresentation {
       const sourceDomains = structuredCapture.metadata.segments.flatMap((segment) => segment.sourceDomains ?? []);
       const hasLinks = structuredCapture.metadata.segments.some((segment) => (segment.sourceUrls?.length ?? 0) > 0);
       return {
-        title: firstLine(structuredCapture.body),
-        subtitle: hasLinks ? `가져온 링크 · ${[...new Set(sourceDomains)].join(", ") || "URL"}` : "가져온 자료",
+        title: firstLine(structuredCapture.body, i18n.t("recent.untitled")),
+        subtitle: hasLinks
+          ? i18n.t("recent.importedLink", { domain: [...new Set(sourceDomains)].join(", ") || "URL" })
+          : i18n.t("recent.importedContent"),
         icon: hasLinks ? Icon.Link : Icon.Clipboard,
       };
     }
     return {
-      title: isUnparsedInternalEvent ? "Context-OS 기록" : firstLine(capture.content),
+      title: isUnparsedInternalEvent
+        ? i18n.t("recent.internalRecord")
+        : firstLine(capture.content, i18n.t("recent.untitled")),
       subtitle: isUnparsedInternalEvent
-        ? firstLine(rawEventBody(capture.content))
+        ? firstLine(rawEventBody(capture.content), i18n.t("recent.untitled"))
         : capture.content.replace(/\s+/g, " ").trim(),
       icon: Icon.Document,
     };
   }
 
-  const action = eventTitles[event.metadata.type];
+  const action = i18n.t(eventTitleKeys[event.metadata.type]);
   const workName = eventWorkName(event.metadata, event.body);
   const note = event.metadata.note?.split(/\r?\n/, 1)[0]?.trim();
-  const bodySummary = firstLine(event.body);
+  const bodySummary = firstLine(event.body, i18n.t("recent.untitled"));
   return {
     title: workName ? `${action} · ${workName}` : action,
     subtitle: note || bodySummary,
@@ -266,6 +289,8 @@ function presentationFor(capture: Capture): CapturePresentation {
 }
 
 export function RecentCapturesCommand() {
+  const localePreferences = getPreferenceValues<RaycastLocalePreferences>();
+  const i18n = useMemo(() => getI18n(localePreferences), [localePreferences.language]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
@@ -280,9 +305,9 @@ export function RecentCapturesCommand() {
     setIsLoading(true);
     (includesContextEvents ? listAllRecentCaptures() : listRecentCaptures())
       .then(setCaptures)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to load captures"))
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : i18n.t("recent.loadFailed")))
       .finally(() => setIsLoading(false));
-  }, [includesContextEvents]);
+  }, [includesContextEvents, i18n]);
 
   const visibleCaptures = useMemo(() => {
     const query = searchText.trim().toLocaleLowerCase();
@@ -292,7 +317,7 @@ export function RecentCapturesCommand() {
 
   const modeActions = (
     <Action
-      title={includesContextEvents ? "Hide Context-OS Events" : "Include Context-OS Events"}
+      title={i18n.t(includesContextEvents ? "recent.hideEvents" : "recent.includeEvents")}
       icon={includesContextEvents ? Icon.EyeDisabled : Icon.Eye}
       onAction={() => setIncludesContextEvents(!includesContextEvents)}
     />
@@ -300,11 +325,7 @@ export function RecentCapturesCommand() {
   const emptyActions = (
     <ActionPanel>
       {modeActions}
-      <Action
-        title="Copy Full SSOT Including Context-OS Events"
-        icon={Icon.Clipboard}
-        onAction={() => copyFullSsot()}
-      />
+      <Action title={i18n.t("recent.copyFull")} icon={Icon.Clipboard} onAction={() => copyFullSsot(i18n)} />
     </ActionPanel>
   );
 
@@ -312,26 +333,26 @@ export function RecentCapturesCommand() {
     <List
       isLoading={isLoading}
       filtering={false}
-      searchBarPlaceholder="Filter recent captures"
+      searchBarPlaceholder={i18n.t("recent.searchPlaceholder")}
       searchText={searchText}
       onSearchTextChange={setSearchText}
     >
       {error ? (
         <List.EmptyView
           icon={Icon.ExclamationMark}
-          title="Could not load captures"
+          title={i18n.t("recent.loadFailed")}
           description={error}
           actions={emptyActions}
         />
       ) : captures.length === 0 && !isLoading ? (
         <List.EmptyView
           icon={Icon.Document}
-          title="No captures yet"
-          description="Save a capture to review it here."
+          title={i18n.t("recent.noCaptures")}
+          description={i18n.t("recent.noCapturesHelp")}
           actions={emptyActions}
         />
       ) : visibleCaptures.length === 0 ? (
-        <List.EmptyView icon={Icon.MagnifyingGlass} title="No matching captures" actions={emptyActions} />
+        <List.EmptyView icon={Icon.MagnifyingGlass} title={i18n.t("recent.noMatches")} actions={emptyActions} />
       ) : (
         visibleCaptures.map((capture) => (
           <CaptureListItem
@@ -340,6 +361,7 @@ export function RecentCapturesCommand() {
             visibleCaptures={visibleCaptures}
             captures={captures}
             modeActions={modeActions}
+            i18n={i18n}
           />
         ))
       )}
@@ -352,28 +374,36 @@ function CaptureListItem({
   visibleCaptures,
   captures,
   modeActions,
+  i18n,
 }: {
   capture: Capture;
   visibleCaptures: Capture[];
   captures: Capture[];
   modeActions: ReactNode;
+  i18n: I18n;
 }) {
-  const presentation = presentationFor(capture);
+  const presentation = presentationFor(capture, i18n);
   return (
     <List.Item
       icon={presentation.icon}
       title={presentation.title}
       subtitle={presentation.subtitle}
-      accessories={[{ date: new Date(capture.createdAt) }]}
+      accessories={[{ text: formatTimestamp(capture.createdAt, i18n) }]}
       actions={
         <ActionPanel>
           <Action.Push
-            title="Open Capture"
-            target={<CaptureDetail capture={capture} visibleCaptures={visibleCaptures} captures={captures} />}
+            title={i18n.t("recent.openCapture")}
+            target={
+              <CaptureDetail capture={capture} visibleCaptures={visibleCaptures} captures={captures} i18n={i18n} />
+            }
           />
-          <ExportActions capture={capture} visibleCaptures={visibleCaptures} captures={captures} />
-          <Action.CopyToClipboard title="Copy Content" content={capture.content} />
-          <Action title="Copy as Context" icon={Icon.Clipboard} onAction={() => copyContext([capture])} />
+          <ExportActions capture={capture} visibleCaptures={visibleCaptures} captures={captures} i18n={i18n} />
+          <Action.CopyToClipboard title={i18n.t("recent.copyContent")} content={capture.content} />
+          <Action
+            title={i18n.t("recent.copyAsContext")}
+            icon={Icon.Clipboard}
+            onAction={() => copyContext([capture], i18n)}
+          />
           <ActionPanel.Section>{modeActions}</ActionPanel.Section>
         </ActionPanel>
       }

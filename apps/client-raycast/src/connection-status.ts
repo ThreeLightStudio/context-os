@@ -1,5 +1,28 @@
 export type ConnectionTarget = "unconfigured" | "local" | "cloudflare";
 
+type ConnectionMessageKey =
+  | "connection.required"
+  | "connection.requiredDetail"
+  | "connection.local"
+  | "connection.localDetail"
+  | "connection.invalidUrl"
+  | "connection.invalidUrlDetail"
+  | "connection.cloudflare"
+  | "connection.cloudflareDetail";
+type ConnectionTranslate = (key: ConnectionMessageKey) => string;
+
+const defaultConnectionMessages: Record<ConnectionMessageKey, string> = {
+  "connection.required": "Setup required",
+  "connection.requiredDetail": "Enter the Context Server URL and read/write API token in Raycast Preferences.",
+  "connection.local": "Local Context Server",
+  "connection.localDetail":
+    "Connects to the Worker/D1 on this device. Use the same URL and token in Chrome to share records.",
+  "connection.invalidUrl": "Check URL",
+  "connection.invalidUrlDetail": "The Context Server URL must use http or https.",
+  "connection.cloudflare": "Cloudflare D1 or external Context Server",
+  "connection.cloudflareDetail": "Uses the Context Server URL and token deployed to a Cloudflare Worker.",
+};
+
 export type ContextConnectionStatus = {
   target: ConnectionTarget;
   title: string;
@@ -11,12 +34,17 @@ function isLoopbackHost(hostname: string) {
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
 }
 
-export function describeContextConnection(serverUrl: string, hasApiToken: boolean): ContextConnectionStatus {
+export function describeContextConnection(
+  serverUrl: string,
+  hasApiToken: boolean,
+  t?: ConnectionTranslate,
+): ContextConnectionStatus {
+  const translate = t ?? ((key: ConnectionMessageKey) => defaultConnectionMessages[key]);
   if (!serverUrl || !hasApiToken) {
     return {
       target: "unconfigured",
-      title: "설정 필요",
-      detail: "Context Server URL과 read/write API token을 Raycast Preferences에 입력해 주세요.",
+      title: translate("connection.required"),
+      detail: translate("connection.requiredDetail"),
     };
   }
 
@@ -25,21 +53,21 @@ export function describeContextConnection(serverUrl: string, hasApiToken: boolea
     if (isLoopbackHost(url.hostname)) {
       return {
         target: "local",
-        title: "로컬 Context Server",
-        detail: "이 기기의 Worker/D1에 연결합니다. Chrome에도 같은 URL과 token을 설정하면 기록을 공유할 수 있습니다.",
+        title: translate("connection.local"),
+        detail: translate("connection.localDetail"),
       };
     }
   } catch {
     return {
       target: "unconfigured",
-      title: "URL 확인 필요",
-      detail: "Context Server URL은 http 또는 https URL이어야 합니다.",
+      title: translate("connection.invalidUrl"),
+      detail: translate("connection.invalidUrlDetail"),
     };
   }
 
   return {
     target: "cloudflare",
-    title: "Cloudflare D1 또는 외부 Context Server",
-    detail: "Cloudflare Worker에 배포한 Context Server URL과 token을 사용합니다.",
+    title: translate("connection.cloudflare"),
+    detail: translate("connection.cloudflareDetail"),
   };
 }
