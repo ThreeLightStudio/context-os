@@ -9,6 +9,7 @@ if (process.platform !== "darwin") {
 
 const extensionDir = resolve(new URL("..", import.meta.url).pathname);
 const helperDir = resolve(extensionDir, "../voice-capture");
+rmSync(join(extensionDir, "dist"), { force: true, recursive: true });
 const build = spawnSync("swift", ["build", "-c", "release", "--package-path", helperDir], { stdio: "inherit" });
 if (build.status !== 0) process.exit(build.status ?? 1);
 
