@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, Check, Cloud, Copy, Link2, Monitor, RefreshCw, Search, Send, Settings, Sparkles, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getActiveTab, subscribeToActiveTab } from './chromeApi'
 import { getBrowserTimeZone, getLocalDate, normalizeBrainEndpointUrl, runDailySummary } from './brainCapture'
 import type { DailySummaryResult } from './brainCapture'
@@ -7,7 +7,9 @@ import { DEFAULT_BRAIN_SERVER_URL } from './config'
 import { checkContextServerConnection, createUrlMemoryCapture, deleteRemoteCapture, listRemoteCaptures, normalizeEndpointUrl, postCapture } from './contextCapture'
 import type { RemoteCapture } from './contextCapture'
 import { filterLinkedThoughtsForUrl, LinkedThoughtsLoader } from './linkedThoughts'
-import { loadStoredSettings, saveAppData, saveStoredSettings, subscribeToStoredSettingsChanges } from './storage'
+import { createI18n, resolveLocale } from './i18n'
+import type { LocalePreference } from './i18n'
+import { loadLocalePreference, loadStoredSettings, saveAppData, saveLocalePreference, saveStoredSettings, subscribeToLocalePreferenceChanges, subscribeToStoredSettingsChanges } from './storage'
 import { copyTextToClipboard, filterThoughtsForCopy, formatThoughtsForClipboard, getThoughtCopyRange } from './thoughtExport'
 import type { AppData, CaptureOutboxItem, ChromeSurface, DeploymentMode, SavedTab, UrlMemory } from './types'
 import type { ThoughtCopyRange } from './thoughtExport'
@@ -28,6 +30,9 @@ export function canCaptureOnUrl(url: string | undefined) {
 }
 
 export function App({ surface }: { surface: ChromeSurface }) {
+  const [localePreference, setLocalePreference] = useState<LocalePreference>('auto')
+  const locale = resolveLocale(localePreference)
+  const { t, formatDate } = useMemo(() => createI18n(locale), [locale])
   const [data, setData] = useState<AppData | null>(null)
   const [storageLoadState, setStorageLoadState] = useState<StorageLoadState>('loading')
   const [storageError, setStorageError] = useState('')
@@ -60,11 +65,36 @@ export function App({ surface }: { surface: ChromeSurface }) {
   const activeTabUrlRef = useRef<string | undefined>(undefined)
   const noteRef = useRef('')
   const screenRef = useRef<Screen>('capture')
+  const tRef = useRef(t)
   const settingsDirtyRef = useRef(false)
   const brainSettingsDirtyRef = useRef(false)
   const linkedThoughtsLoaderRef = useRef<LinkedThoughtsLoader | null>(null)
   if (!linkedThoughtsLoaderRef.current) linkedThoughtsLoaderRef.current = new LinkedThoughtsLoader()
   const linkedThoughtsLoader = linkedThoughtsLoaderRef.current
+
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
+
+  useEffect(() => {
+    let active = true
+    void loadLocalePreference().then((preference) => {
+      if (active) setLocalePreference(preference)
+    }).catch(() => {})
+    const unsubscribe = subscribeToLocalePreferenceChanges(() => {
+      void loadLocalePreference().then((preference) => {
+        if (active) setLocalePreference(preference)
+      }).catch(() => {})
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
 
   useEffect(() => {
     noteRef.current = note
@@ -97,7 +127,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setStorageLoadState('ready')
     } catch {
       setStorageLoadState('error')
-      setStorageError('저장된 설정을 불러오지 못했습니다. 기존 데이터를 보호하기 위해 새 설정을 시작하지 않았습니다.')
+      setStorageError(tRef.current('app.storageErrorDescription'))
     }
   }, [])
 
@@ -140,15 +170,15 @@ export function App({ surface }: { surface: ChromeSurface }) {
 
   const saveCapture = useCallback(async () => {
     if (!data || !activeTab) {
-      setStatus('현재 탭을 읽을 수 없습니다. 일반 웹페이지를 열어 주세요.')
+      setStatus(t('capture.noActiveTab'))
       return
     }
     if (!canCaptureOnUrl(activeTab.url)) {
-      setStatus('새 탭을 제외한 Chrome 내부 페이지에서는 기록할 수 없습니다.')
+      setStatus(t('capture.unsupportedPage'))
       return
     }
     if (!note.trim()) {
-      setStatus('먼저 짧은 메모를 입력해 주세요.')
+      setStatus(t('capture.emptyNote'))
       return
     }
 
@@ -170,7 +200,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
         createdAt: nowIso()
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Capture를 만들지 못했습니다.')
+      setStatus(error instanceof Error ? error.message : t('capture.createError'))
       return
     }
 
@@ -182,13 +212,13 @@ export function App({ surface }: { surface: ChromeSurface }) {
     try {
       await persist(saved)
     } catch {
-      setStatus('이 기기에 기록을 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(t('capture.saveError'))
       return
     }
     setNote('')
 
     if (!saved.sync.endpointUrl || !apiToken) {
-      setStatus('이 기기에 저장했습니다. 로컬 Context Server 또는 Cloudflare D1을 연결하면 전송할 수 있습니다.')
+      setStatus(t('capture.savedLocally'))
       return
     }
 
@@ -206,13 +236,11 @@ export function App({ surface }: { surface: ChromeSurface }) {
     try {
       await persist(next)
     } catch {
-      setStatus(result.ok
-        ? '서버에는 기록했지만 이 기기의 상태를 저장하지 못했습니다. 다시 열어 전송 대기를 확인해 주세요.'
-        : '전송 대기 상태를 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(result.ok ? t('capture.remoteStateSaveError') : t('capture.outboxStateSaveError'))
       return
     }
-    setStatus(result.ok ? 'Context Server에 기록했습니다.' : `로컬에 저장했습니다. 전송 대기: ${result.error}`)
-  }, [activeTab, apiToken, data, note, persist, refreshLinkedThoughtsForUrl])
+    setStatus(result.ok ? t('capture.remoteSaved') : t('capture.queued', { error: result.error }))
+  }, [activeTab, apiToken, data, note, persist, refreshLinkedThoughtsForUrl, t])
 
   const selectDeploymentMode = (mode: DeploymentMode) => {
     if (mode === deploymentMode) return
@@ -234,6 +262,19 @@ export function App({ surface }: { surface: ChromeSurface }) {
     markSettingsDirty()
   }
 
+  const updateLocalePreference = async (preference: LocalePreference) => {
+    if (preference === localePreference) return
+    const previousPreference = localePreference
+    setLocalePreference(preference)
+    try {
+      await saveLocalePreference(preference)
+      setStatus(createI18n(resolveLocale(preference)).t('settings.languageSaved'))
+    } catch {
+      setLocalePreference(previousPreference)
+      setStatus(tRef.current('settings.languageSaveError'))
+    }
+  }
+
   const openSettings = () => {
     settingsDirtyRef.current = false
     brainSettingsDirtyRef.current = false
@@ -253,7 +294,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
     try {
       await persist({ ...data, sync: { ...data.sync, developerMode } })
     } catch {
-      setStatus('개발자 모드 변경을 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(t('settings.developerModeSaveError'))
     }
   }
 
@@ -272,10 +313,10 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setTokenInput('')
       settingsDirtyRef.current = false
       brainSettingsDirtyRef.current = false
-      setStatus('이 기기에만 기록을 저장합니다. Raycast와 함께 쓰려면 연결 설정에서 로컬 Context Server를 추가하세요.')
+      setStatus(t('settings.localModeSaved'))
       setScreen('capture')
     } catch {
-      setStatus('로컬 모드 설정을 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(t('settings.localModeSaveError'))
     }
   }
 
@@ -286,10 +327,10 @@ export function App({ surface }: { surface: ChromeSurface }) {
       const modeChanged = deploymentMode !== data.sync.mode
       const nextApiToken = tokenInput.trim() || (modeChanged ? '' : apiToken)
       if (deploymentMode === 'cloudflare' && (!endpointUrl || !nextApiToken)) {
-        throw new Error('Cloudflare D1 모드에는 Context Server URL과 read/write API token이 필요합니다.')
+        throw new Error(t('settings.cloudflareRequirements'))
       }
       if ((endpointUrl === '') !== (nextApiToken === '')) {
-        throw new Error('Context Server URL과 API token은 함께 입력해 주세요.')
+        throw new Error(t('settings.pairedCredentials'))
       }
       const brainEndpointUrl = brainEndpoint.trim() ? normalizeBrainEndpointUrl(brainEndpoint) : DEFAULT_BRAIN_SERVER_URL
       const nextBrainApiToken = brainTokenInput.trim() || brainApiToken
@@ -307,20 +348,20 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setBrainEndpoint(brainEndpointUrl)
       setConnectionStatus('')
       setStatus(endpointUrl && nextApiToken
-        ? deploymentMode === 'local' ? '로컬 Context Server 연결 설정을 저장했습니다.' : 'Cloudflare D1 연결 설정을 저장했습니다.'
-        : '이 기기에만 기록을 저장합니다. 필요할 때 로컬 Context Server를 연결할 수 있습니다.')
+        ? deploymentMode === 'local' ? t('settings.localConnectionSaved') : t('settings.cloudflareConnectionSaved')
+        : t('settings.deviceOnlySaved'))
       settingsDirtyRef.current = false
       brainSettingsDirtyRef.current = false
       setScreen('capture')
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : '서버 주소를 확인해 주세요.')
+      setStatus(error instanceof Error ? error.message : t('settings.invalidServerAddress'))
     }
   }
 
   const verifyConnection = async () => {
     if (!data || connectionChecking) return
     setConnectionChecking(true)
-    setConnectionStatus('연결을 확인하고 저장하는 중…')
+    setConnectionStatus(t('settings.connectionSaving'))
     const nextApiToken = tokenInput.trim() || apiToken
     const result = await checkContextServerConnection({ endpointUrl: endpoint, apiToken: nextApiToken })
     if (!result.ok) {
@@ -340,11 +381,11 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setEndpoint(endpointUrl)
       setApiToken(nextApiToken)
       setTokenInput('')
-      setConnectionStatus('연결을 확인하고 저장했습니다. API token에 read 권한이 있습니다.')
-      setStatus(deploymentMode === 'local' ? '로컬 Context Server 연결 설정을 저장했습니다.' : 'Cloudflare D1 연결 설정을 저장했습니다.')
+    setConnectionStatus(t('settings.connectionSaved'))
+      setStatus(deploymentMode === 'local' ? t('settings.localConnectionSaved') : t('settings.cloudflareConnectionSaved'))
       settingsDirtyRef.current = brainSettingsDirtyRef.current
     } catch (error) {
-      setConnectionStatus(error instanceof Error ? error.message : '연결 설정을 저장하지 못했습니다.')
+      setConnectionStatus(error instanceof Error ? error.message : t('settings.connectionSaveError'))
     } finally {
       setConnectionChecking(false)
     }
@@ -357,9 +398,9 @@ export function App({ surface }: { surface: ChromeSurface }) {
       setApiToken('')
       setTokenInput('')
       setConnectionStatus('')
-      setStatus('API token을 삭제했습니다. 로컬 저장은 계속 사용할 수 있습니다.')
+      setStatus(t('settings.apiTokenDeleted'))
     } catch {
-      setStatus('API token을 삭제하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(t('settings.apiTokenDeleteError'))
     }
   }
 
@@ -369,9 +410,9 @@ export function App({ surface }: { surface: ChromeSurface }) {
       await saveStoredSettings({ data, apiToken, brainApiToken: '' })
       setBrainApiToken('')
       setBrainTokenInput('')
-      setStatus('Brain Server API token을 삭제했습니다.')
+      setStatus(t('settings.brainTokenDeleted'))
     } catch {
-      setStatus('Brain Server API token을 삭제하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(t('settings.brainTokenDeleteError'))
     }
   }
 
@@ -395,28 +436,30 @@ export function App({ surface }: { surface: ChromeSurface }) {
         }
       })
     } catch {
-      setStatus('전송 결과를 이 기기에 저장하지 못했습니다. Chrome 저장소를 확인한 뒤 다시 시도해 주세요.')
+      setStatus(t('capture.pendingStateSaveError'))
       return
     }
-    setStatus(succeeded.size === results.length ? '대기 중인 기록을 모두 전송했습니다.' : `${succeeded.size}건 전송, ${results.length - succeeded.size}건 대기 중입니다.`)
+    setStatus(succeeded.size === results.length
+      ? t('settings.retryAll')
+      : t('settings.retrySome', { sent: succeeded.size, pending: results.length - succeeded.size }))
   }
 
   const loadThoughts = useCallback(async () => {
     if (!data?.sync.endpointUrl || !apiToken) {
-      setThoughtStatus('로컬 Context Server 또는 Cloudflare D1 연결을 먼저 설정해 주세요.')
+      setThoughtStatus(t('thoughts.connectionRequired'))
       setThoughts([])
       return
     }
-    setThoughtStatus('생각을 불러오는 중…')
+    setThoughtStatus(t('thoughts.loading'))
     const result = await listRemoteCaptures({ endpointUrl: data.sync.endpointUrl, apiToken })
     if (result.ok) {
       setThoughts(result.captures)
-      setThoughtStatus(result.captures.length > 0 ? '' : '저장된 생각이 아직 없습니다.')
+    setThoughtStatus(result.captures.length > 0 ? '' : t('thoughts.empty'))
     } else {
       setThoughts([])
-      setThoughtStatus(`생각을 불러오지 못했습니다: ${result.error}`)
+    setThoughtStatus(t('thoughts.loadError', { error: result.error }))
     }
-  }, [apiToken, data])
+  }, [apiToken, data, t])
 
   useEffect(() => {
     linkedThoughtsLoader.reset()
@@ -434,12 +477,12 @@ export function App({ surface }: { surface: ChromeSurface }) {
     }
     if (activeTabUrlRef.current && activeTabUrlRef.current !== currentUrl && noteRef.current) {
       setNote('')
-      setStatus('현재 링크가 바뀌어 작성 중인 메모를 비웠습니다.')
+    setStatus(t('thoughts.linkChanged'))
     }
     activeTabUrlRef.current = currentUrl
     setLinkedThoughts([])
     linkedThoughtsLoader.load(currentUrl, loadLinkedThoughts, setLinkedThoughts)
-  }, [activeTab?.url, linkedThoughtsLoader, loadLinkedThoughts])
+  }, [activeTab?.url, linkedThoughtsLoader, loadLinkedThoughts, t])
 
   const openThoughts = () => {
     setThoughtUrlFilter('')
@@ -465,7 +508,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
       })
       setSummaryResult(result)
     } catch (error) {
-      setSummaryStatus(error instanceof Error ? error.message : 'Daily Summary를 만들지 못했습니다.')
+    setSummaryStatus(error instanceof Error ? error.message : t('summary.createError'))
     } finally {
       setSummaryLoading(false)
     }
@@ -505,28 +548,28 @@ export function App({ surface }: { surface: ChromeSurface }) {
     setScreen('capture')
     setStatus(
       linkResult === 'opened'
-        ? '링크를 새 탭에서 열고, 메모를 작성 화면에 불러왔습니다.'
+        ? t('thoughts.resumeOpened')
         : linkResult === 'missing'
-          ? '연결된 링크가 없어 메모만 작성 화면에 불러왔습니다.'
-          : '링크를 열지 못해 메모만 작성 화면에 불러왔습니다.'
+          ? t('thoughts.resumeMissing')
+          : t('thoughts.resumeFailed')
     )
   }
 
   const deleteThought = async (thought: RemoteCapture) => {
     if (!data?.sync.endpointUrl || !apiToken || !data.sync.developerMode) return
-    if (!window.confirm('이 Record를 Context Server에서 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return
+    if (!window.confirm(t('thoughts.confirmDelete'))) return
     const result = await deleteRemoteCapture({ endpointUrl: data.sync.endpointUrl, apiToken }, thought.id)
     if (result.ok) {
       refreshLinkedThoughtsForUrl(thought.data.context?.browser?.url)
       setThoughts((current) => current.filter((item) => item.id !== thought.id))
-      setThoughtStatus('Record를 삭제했습니다.')
+      setThoughtStatus(t('thoughts.deleted'))
     } else {
-      setThoughtStatus(`삭제하지 못했습니다: ${result.error}`)
+      setThoughtStatus(t('thoughts.deleteError', { error: result.error }))
     }
   }
 
   const copyThoughts = async (rangeType: ThoughtCopyRange) => {
-    const range = getThoughtCopyRange(rangeType, new Date(), copyStart, copyEnd)
+    const range = getThoughtCopyRange(rangeType, new Date(), copyStart, copyEnd, locale)
     if ('error' in range) {
       setCopyStatus(range.error)
       return
@@ -534,10 +577,10 @@ export function App({ surface }: { surface: ChromeSurface }) {
 
     const matchingThoughts = filterThoughtsForCopy(thoughts, range)
     try {
-      await copyTextToClipboard(formatThoughtsForClipboard(matchingThoughts, range.label))
-      setCopyStatus(`${range.label} ${matchingThoughts.length}개를 클립보드에 복사했습니다.`)
+      await copyTextToClipboard(formatThoughtsForClipboard(matchingThoughts, range.label, locale), locale)
+    setCopyStatus(t('thoughts.copySuccess', { label: range.label, count: matchingThoughts.length }))
     } catch (error) {
-      setCopyStatus(error instanceof Error ? `복사하지 못했습니다: ${error.message}` : '복사하지 못했습니다. 브라우저 권한을 확인해 주세요.')
+      setCopyStatus(error instanceof Error ? t('thoughts.copyErrorWithReason', { error: error.message }) : t('thoughts.copyError'))
     }
   }
 
@@ -545,16 +588,16 @@ export function App({ surface }: { surface: ChromeSurface }) {
     return (
       <main className="capture-shell">
         <section className="capture-card storage-error" role="alert">
-          <p className="eyebrow">Storage protection</p>
-          <h1>저장된 설정을 열지 못했습니다</h1>
+          <p className="eyebrow">{t('app.storageErrorEyebrow')}</p>
+          <h1>{t('app.storageErrorTitle')}</h1>
           <p>{storageError}</p>
-          <button className="primary-button" type="button" onClick={() => void refreshStoredSettings({ initial: true, replaceSettingsForm: true })}>다시 시도</button>
+          <button className="primary-button" type="button" onClick={() => void refreshStoredSettings({ initial: true, replaceSettingsForm: true })}>{t('app.retry')}</button>
         </section>
       </main>
     )
   }
 
-  if (storageLoadState !== 'ready' || !data) return <main className="capture-shell"><p>Context OS를 여는 중…</p></main>
+  if (storageLoadState !== 'ready' || !data) return <main className="capture-shell"><p>{t('app.storageLoading')}</p></main>
 
   const canCapture = !activeTab || canCaptureOnUrl(activeTab.url)
   const visibleThoughts = thoughts.filter((thought) =>
@@ -567,147 +610,154 @@ export function App({ surface }: { surface: ChromeSurface }) {
       {screen === 'setup' ? (
         <section className="capture-card setup-card" aria-labelledby="setup-title">
           <header className="capture-header">
-            <div><p className="eyebrow">Context OS</p><h1 id="setup-title">데이터 보관 방식 선택</h1></div>
+            <div><p className="eyebrow">{t('setup.eyebrow')}</p><h1 id="setup-title">{t('setup.title')}</h1></div>
           <Monitor size={20} aria-hidden="true" className="setup-icon" />
           </header>
-          <p className="setup-intro">기록을 이 기기에만 보관하거나, 내 Cloudflare D1에 동기화할 수 있습니다. 언제든 연결 설정에서 바꿀 수 있어요.</p>
+          <p className="setup-intro">{t('setup.intro')}</p>
           <div className="setup-mode-grid">
             <button className="setup-mode-card" type="button" onClick={() => void startLocalMode()}>
               <Monitor size={19} aria-hidden="true" />
-              <span><strong>로컬로 시작</strong><small>Chrome 로컬 저장으로 바로 사용합니다. Raycast와 함께 쓰려면 나중에 로컬 Context Server를 연결하세요.</small></span>
+              <span><strong>{t('setup.localTitle')}</strong><small>{t('setup.localDescription')}</small></span>
             </button>
             <button className="setup-mode-card" type="button" onClick={() => { selectDeploymentMode('cloudflare'); setScreen('settings') }}>
               <Cloud size={19} aria-hidden="true" />
-              <span><strong>Cloudflare D1 연결</strong><small>내 Cloudflare Worker URL과 API token을 입력해 여러 클라이언트에서 기록을 사용합니다.</small></span>
+              <span><strong>{t('setup.cloudflareTitle')}</strong><small>{t('setup.cloudflareDescription')}</small></span>
             </button>
           </div>
-          <p className="help-text">이전 버전에서 연결이 초기화되었다면 Cloudflare 주소와 token을 한 번 다시 입력해 주세요.</p>
+          <p className="help-text">{t('setup.legacyHint')}</p>
         </section>
       ) : screen === 'settings' ? (
         <section className="capture-card" aria-labelledby="settings-title">
           <header className="capture-header">
-            <button className="icon-button" type="button" aria-label="메모 화면으로 돌아가기" onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
-            <div><p className="eyebrow">Context OS</p><h1 id="settings-title">연결 설정</h1></div>
+            <button className="icon-button" type="button" aria-label={t('app.backToCapture')} onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
+            <div><p className="eyebrow">Context OS</p><h1 id="settings-title">{t('settings.title')}</h1></div>
           </header>
-          {settingsChangedElsewhere ? <div className="settings-conflict" role="status"><span>다른 화면에서 저장된 설정이 있습니다. 현재 입력을 유지하고 있습니다.</span><button type="button" onClick={reloadSettingsForm}>저장값 다시 불러오기</button></div> : null}
-          <div className="settings-section-heading"><p className="eyebrow">Storage</p><h2>운영 방식</h2></div>
-          <div className="mode-picker" role="radiogroup" aria-label="운영 방식">
+          {settingsChangedElsewhere ? <div className="settings-conflict" role="status"><span>{t('settings.conflict')}</span><button type="button" onClick={reloadSettingsForm}>{t('settings.reload')}</button></div> : null}
+          <div className="settings-section-heading"><p className="eyebrow">{t('settings.languageEyebrow')}</p><h2>{t('settings.languageTitle')}</h2></div>
+          <label className="capture-field">
+            <span>{t('settings.languageLabel')}</span>
+            <select value={localePreference} onChange={(event) => void updateLocalePreference(event.target.value as LocalePreference)}>
+              <option value="auto">{t('settings.languageAuto')}</option>
+              <option value="ko">{t('settings.languageKorean')}</option>
+              <option value="en">{t('settings.languageEnglish')}</option>
+            </select>
+          </label>
+          <div className="settings-section-heading"><p className="eyebrow">{t('settings.storageEyebrow')}</p><h2>{t('settings.storageTitle')}</h2></div>
+          <div className="mode-picker" role="radiogroup" aria-label={t('settings.operationMode')}>
             <label className={`mode-option ${deploymentMode === 'local' ? 'is-selected' : ''}`}>
               <input type="radio" name="deployment-mode" checked={deploymentMode === 'local'} onChange={() => selectDeploymentMode('local')} />
               <Monitor size={17} aria-hidden="true" />
-              <span><strong>로컬</strong><small>이 기기 또는 로컬 Worker/D1</small></span>
+              <span><strong>{t('settings.local')}</strong><small>{t('settings.localDescription')}</small></span>
             </label>
             <label className={`mode-option ${deploymentMode === 'cloudflare' ? 'is-selected' : ''}`}>
               <input type="radio" name="deployment-mode" checked={deploymentMode === 'cloudflare'} onChange={() => selectDeploymentMode('cloudflare')} />
               <Cloud size={17} aria-hidden="true" />
-              <span><strong>Cloudflare D1</strong><small>내 Worker와 D1 데이터베이스</small></span>
+              <span><strong>{t('settings.cloudflare')}</strong><small>{t('settings.cloudflareDescription')}</small></span>
             </label>
           </div>
-          <p className="help-text">{deploymentMode === 'local'
-            ? 'Chrome만 사용할 때는 아래 값을 비워 두세요. Raycast와 공유하려면 로컬 Context Server 주소와 token을 함께 입력합니다.'
-            : 'Cloudflare에 배포한 내 Context Server URL과 read/write API token을 입력합니다.'}</p>
+          <p className="help-text">{deploymentMode === 'local' ? t('settings.localHelp') : t('settings.cloudflareHelp')}</p>
           <label className="capture-field">
-            <span>{deploymentMode === 'local' ? '로컬 Context Server 주소 (선택)' : 'Cloudflare Context Server 주소'}</span>
+            <span>{deploymentMode === 'local' ? t('settings.localEndpoint') : t('settings.cloudflareEndpoint')}</span>
             <input value={endpoint} onChange={(event) => { markSettingsDirty(); setEndpoint(event.target.value); setConnectionStatus('') }} placeholder={deploymentMode === 'local' ? 'http://127.0.0.1:8787' : 'https://context.example.com'} inputMode="url" />
           </label>
           <label className="capture-field settings-token-field">
-            <span>API token</span>
+            <span>{t('settings.apiToken')}</span>
             <input
               type="password"
               value={tokenInput}
               onChange={(event) => { markSettingsDirty(); setTokenInput(event.target.value); setConnectionStatus('') }}
-              placeholder={apiToken ? '설정됨 — 변경할 때만 입력' : 'Read/write API token'}
+              placeholder={apiToken ? t('settings.apiTokenConfiguredPlaceholder') : t('settings.apiTokenPlaceholder')}
               autoComplete="new-password"
               spellCheck={false}
             />
           </label>
-          <p className="secret-status" role="status"><strong>API token</strong>{apiToken ? 'Configured. 비밀 토큰은 표시하지 않습니다.' : 'Not configured. 서버 연결을 위해 입력해 주세요.'}</p>
-          <p className="help-text">token은 백업 데이터와 화면에 포함하지 않고 이 확장 프로그램의 로컬 저장소에만 보관합니다.</p>
-          {endpoint.trim() || tokenInput.trim() || apiToken ? <button className="secondary-button" type="button" disabled={connectionChecking} onClick={() => void verifyConnection()}>{connectionChecking ? <><RefreshCw size={17} className="spin" />연결 확인 및 저장 중…</> : <><RefreshCw size={17} />연결 확인 및 저장</>}</button> : null}
+          <p className="secret-status" role="status"><strong>{t('settings.apiToken')}</strong>{apiToken ? ` ${t('settings.configured')}` : ` ${t('settings.notConfigured')}`}</p>
+          <p className="help-text">{t('settings.tokenStorageHelp')}</p>
+          {endpoint.trim() || tokenInput.trim() || apiToken ? <button className="secondary-button" type="button" disabled={connectionChecking} onClick={() => void verifyConnection()}>{connectionChecking ? <><RefreshCw size={17} className="spin" />{t('settings.connectionSaving')}</> : <><RefreshCw size={17} />{t('settings.verifyAndSave')}</>}</button> : null}
           {connectionStatus ? <p className="connection-status" role="status">{connectionStatus}</p> : null}
-          {endpoint.trim() || tokenInput.trim() || apiToken ? <p className="help-text">연결 확인에 성공하면 Context Server 주소와 API token을 바로 적용합니다.</p> : null}
+          {endpoint.trim() || tokenInput.trim() || apiToken ? <p className="help-text">{t('settings.applyHelp')}</p> : null}
           <div className="settings-divider" />
-          <div className="settings-section-heading"><p className="eyebrow">Intelligence</p><h2>Brain Server</h2></div>
+          <div className="settings-section-heading"><p className="eyebrow">{t('settings.intelligenceEyebrow')}</p><h2>{t('settings.brainServer')}</h2></div>
           <label className="capture-field">
-            <span>Brain Server 주소</span>
+            <span>{t('settings.brainEndpoint')}</span>
             <input value={brainEndpoint} onChange={(event) => { markBrainSettingsDirty(); setBrainEndpoint(event.target.value) }} placeholder="http://127.0.0.1:8788" inputMode="url" />
           </label>
           <label className="capture-field settings-token-field">
-            <span>Brain Server API token</span>
+            <span>{t('settings.brainApiToken')}</span>
             <input
               type="password"
               value={brainTokenInput}
               onChange={(event) => { markBrainSettingsDirty(); setBrainTokenInput(event.target.value) }}
-              placeholder={brainApiToken ? '설정됨 — 변경할 때만 입력' : '선택 사항'}
+              placeholder={brainApiToken ? t('settings.apiTokenConfiguredPlaceholder') : t('settings.optional')}
               autoComplete="new-password"
               spellCheck={false}
             />
           </label>
-          <p className="secret-status" role="status"><strong>Brain token</strong>{brainApiToken ? 'Configured. 비밀 토큰은 표시하지 않습니다.' : 'Optional. 로컬 Brain Server가 인증 없이 실행 중이면 비워 두세요.'}</p>
-          <p className="help-text">Daily Summary는 이 주소의 Brain Server가 Context Server 기록을 조회하고 요약합니다.</p>
+          <p className="secret-status" role="status"><strong>Brain token</strong>{brainApiToken ? ` ${t('settings.configured')}` : ` ${t('settings.brainTokenOptional')}`}</p>
+          <p className="help-text">{t('settings.brainHelp')}</p>
           <label className="developer-mode">
             <input
               type="checkbox"
               checked={data.sync.developerMode}
               onChange={(event) => void updateDeveloperMode(event.target.checked)}
             />
-            <span><strong>개발자 모드</strong>테스트·Mock Record 삭제 버튼을 표시합니다.</span>
+            <span><strong>{t('settings.developerMode')}</strong>{t('settings.developerModeDescription')}</span>
           </label>
-          <button className="primary-button" type="button" onClick={() => void saveSettings()}><Check size={17} />연결 설정 저장</button>
-          {apiToken ? <button className="danger-button" type="button" onClick={() => void clearApiToken()}>API token 삭제</button> : null}
-          {brainApiToken ? <button className="danger-button" type="button" onClick={() => void clearBrainApiToken()}>Brain token 삭제</button> : null}
-          {data.sync.outbox.length > 0 ? <button className="secondary-button" type="button" onClick={() => void retryPending()}><Cloud size={17} />전송 대기 {data.sync.outbox.length}건 다시 시도</button> : null}
+          <button className="primary-button" type="button" onClick={() => void saveSettings()}><Check size={17} />{t('settings.save')}</button>
+          {apiToken ? <button className="danger-button" type="button" onClick={() => void clearApiToken()}>{t('settings.deleteApiToken')}</button> : null}
+          {brainApiToken ? <button className="danger-button" type="button" onClick={() => void clearBrainApiToken()}>{t('settings.deleteBrainToken')}</button> : null}
+          {data.sync.outbox.length > 0 ? <button className="secondary-button" type="button" onClick={() => void retryPending()}><Cloud size={17} />{t('settings.retryPending', { count: data.sync.outbox.length })}</button> : null}
         </section>
       ) : screen === 'summary' ? (
         <section className="capture-card" aria-labelledby="summary-title">
           <header className="capture-header">
-            <button className="icon-button" type="button" aria-label="메모 화면으로 돌아가기" onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
-            <div><p className="eyebrow">Brain Server</p><h1 id="summary-title">오늘 요약</h1></div>
+            <button className="icon-button" type="button" aria-label={t('app.backToCapture')} onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
+            <div><p className="eyebrow">{t('settings.brainServer')}</p><h1 id="summary-title">{t('summary.title')}</h1></div>
             <Sparkles size={20} aria-hidden="true" className="summary-icon" />
           </header>
           <label className="capture-field summary-date-field">
-            <span><CalendarDays size={14} aria-hidden="true" />요약 날짜 · {getBrowserTimeZone()}</span>
+            <span><CalendarDays size={14} aria-hidden="true" />{t('summary.date')} · {getBrowserTimeZone()}</span>
             <input type="date" value={summaryDate} onChange={(event) => { setSummaryDate(event.target.value); setSummaryResult(null); setSummaryStatus('') }} />
           </label>
-          <p className="summary-intro">선택한 날짜의 Context 기록을 가져와 짧게 정리합니다.</p>
+          <p className="summary-intro">{t('summary.intro')}</p>
           <button className="primary-button" type="button" onClick={() => void createSummary()} disabled={summaryLoading || !summaryDate}>
-            {summaryLoading ? <><Sparkles size={17} className="spin" />요약을 만드는 중…</> : <><Sparkles size={17} />요약 생성</>}
+            {summaryLoading ? <><Sparkles size={17} className="spin" />{t('summary.loading')}</> : <><Sparkles size={17} />{t('summary.create')}</>}
           </button>
           {summaryStatus ? <p className="summary-error" role="alert">{summaryStatus}</p> : null}
           {summaryResult ? (
             <section className={`summary-result ${summaryResult.recordCount === 0 ? 'is-empty' : ''}`} aria-live="polite">
-              <div className="summary-result-meta"><span>{summaryResult.recordCount === 0 ? '기록 없음' : `Context 기록 ${summaryResult.recordCount}개`}</span><span>{summaryResult.date} · {summaryResult.timezone}</span></div>
+              <div className="summary-result-meta"><span>{summaryResult.recordCount === 0 ? t('summary.noRecords') : t('summary.recordCount', { count: summaryResult.recordCount })}</span><span>{summaryResult.date} · {summaryResult.timezone}</span></div>
               <p className="summary-text">{summaryResult.summary}</p>
-              {summaryResult.keyPoints.length > 0 ? <div className="summary-points"><h2>핵심 포인트</h2><ul>{summaryResult.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div> : <p className="summary-empty-help">먼저 생각을 남기면 이 날짜의 요약이 여기에 나타납니다.</p>}
+              {summaryResult.keyPoints.length > 0 ? <div className="summary-points"><h2>{t('summary.keyPoints')}</h2><ul>{summaryResult.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div> : <p className="summary-empty-help">{t('summary.emptyHelp')}</p>}
             </section>
           ) : null}
         </section>
       ) : screen === 'thoughts' ? (
         <section className="capture-card" aria-labelledby="thoughts-title">
           <header className="capture-header">
-            <button className="icon-button" type="button" aria-label="메모 화면으로 돌아가기" onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
-            <div><p className="eyebrow">Context Server</p><h1 id="thoughts-title">생각 전체 조회</h1></div>
-            <button className="icon-button" type="button" aria-label="생각 새로고침" onClick={() => void loadThoughts()}><RefreshCw size={17} /></button>
+            <button className="icon-button" type="button" aria-label={t('app.backToCapture')} onClick={() => setScreen('capture')}><ArrowLeft size={17} /></button>
+            <div><p className="eyebrow">Context Server</p><h1 id="thoughts-title">{t('thoughts.title')}</h1></div>
+            <button className="icon-button" type="button" aria-label={t('thoughts.refresh')} onClick={() => void loadThoughts()}><RefreshCw size={17} /></button>
           </header>
           <label className="capture-field search-field">
-            <span>생각 검색</span>
-            <div><Search size={17} aria-hidden="true" /><input value={thoughtQuery} onChange={(event) => setThoughtQuery(event.target.value)} placeholder="기억나는 단어를 입력하세요" /></div>
+            <span>{t('thoughts.search')}</span>
+            <div><Search size={17} aria-hidden="true" /><input value={thoughtQuery} onChange={(event) => setThoughtQuery(event.target.value)} placeholder={t('thoughts.searchPlaceholder')} /></div>
           </label>
-          {thoughtUrlFilter ? <div className="link-filter"><Link2 size={14} /><span>현재 링크의 기록만 표시 중</span><button type="button" onClick={() => setThoughtUrlFilter('')}>전체 보기</button></div> : null}
+          {thoughtUrlFilter ? <div className="link-filter"><Link2 size={14} /><span>{t('thoughts.filteredByLink')}</span><button type="button" onClick={() => setThoughtUrlFilter('')}>{t('thoughts.showAll')}</button></div> : null}
           <section className="copy-thoughts" aria-labelledby="copy-thoughts-title">
-            <div className="copy-thoughts-heading"><div><p className="eyebrow">External use</p><h2 id="copy-thoughts-title">생각 복사</h2></div><Copy size={18} aria-hidden="true" /></div>
-            <p>시간, 원문, 연결한 링크를 함께 복사합니다.</p>
+            <div className="copy-thoughts-heading"><div><p className="eyebrow">{t('thoughts.externalUse')}</p><h2 id="copy-thoughts-title">{t('thoughts.copyTitle')}</h2></div><Copy size={18} aria-hidden="true" /></div>
+            <p>{t('thoughts.copyDescription')}</p>
             <div className="copy-range-actions">
-              <button type="button" onClick={() => void copyThoughts('today')}>오늘 기록 복사</button>
-              <button type="button" onClick={() => void copyThoughts('week')}>이번 주 기록 복사</button>
-              <button type="button" onClick={() => void copyThoughts('month')}>이번 달 기록 복사</button>
-              <button type="button" onClick={() => void copyThoughts('all')}>전체 생각 복사</button>
+              <button type="button" onClick={() => void copyThoughts('today')}>{t('thoughts.copyToday')}</button>
+              <button type="button" onClick={() => void copyThoughts('week')}>{t('thoughts.copyWeek')}</button>
+              <button type="button" onClick={() => void copyThoughts('month')}>{t('thoughts.copyMonth')}</button>
+              <button type="button" onClick={() => void copyThoughts('all')}>{t('thoughts.copyAll')}</button>
             </div>
             <div className="custom-copy-range">
-              <label><span>시작일</span><input type="date" value={copyStart} onChange={(event) => setCopyStart(event.target.value)} /></label>
+              <label><span>{t('thoughts.startDate')}</span><input type="date" value={copyStart} onChange={(event) => setCopyStart(event.target.value)} /></label>
               <span aria-hidden="true">–</span>
-              <label><span>종료일</span><input type="date" value={copyEnd} onChange={(event) => setCopyEnd(event.target.value)} /></label>
-              <button type="button" onClick={() => void copyThoughts('custom')}>선택 기간 복사</button>
+              <label><span>{t('thoughts.endDate')}</span><input type="date" value={copyEnd} onChange={(event) => setCopyEnd(event.target.value)} /></label>
+              <button type="button" onClick={() => void copyThoughts('custom')}>{t('thoughts.copySelected')}</button>
             </div>
             {copyStatus ? <p className="copy-status" role="status">{copyStatus}</p> : null}
           </section>
@@ -715,40 +765,40 @@ export function App({ surface }: { surface: ChromeSurface }) {
             {visibleThoughts.map((thought) => (
               <article className="thought-row" key={thought.id}>
                 <button className="thought-content" type="button" onClick={() => resumeThought(thought)}>
-                  {thought.data.context?.browser?.url ? <Link2 size={16} aria-label="연결된 링크 있음" /> : null}
+                  {thought.data.context?.browser?.url ? <Link2 size={16} aria-label={t('thoughts.linked')} /> : null}
                   <p>{thought.data.content}</p>
-                  <footer>{new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(thought.recordedAt))}{thought.data.context?.browser?.title ? ` · ${thought.data.context.browser.title}` : ''}</footer>
+                  <footer>{formatDate(new Date(thought.recordedAt), { dateStyle: 'medium', timeStyle: 'short' })}{thought.data.context?.browser?.title ? ` · ${thought.data.context.browser.title}` : ''}</footer>
                 </button>
-                {data.sync.developerMode ? <button className="delete-button" type="button" onClick={() => void deleteThought(thought)}><Trash2 size={14} />삭제</button> : null}
+                {data.sync.developerMode ? <button className="delete-button" type="button" onClick={() => void deleteThought(thought)}><Trash2 size={14} />{t('thoughts.delete')}</button> : null}
               </article>
             ))}
           </div>
           {thoughtStatus ? <p className="help-text">{thoughtStatus}</p> : null}
-          {!thoughtStatus && thoughts.length > 0 && visibleThoughts.length === 0 ? <p className="help-text">일치하는 생각이 없습니다.</p> : null}
+          {!thoughtStatus && thoughts.length > 0 && visibleThoughts.length === 0 ? <p className="help-text">{t('thoughts.noMatch')}</p> : null}
         </section>
       ) : (
         <section className="capture-card" aria-labelledby="capture-title">
           <header className="capture-header">
-            <div><p className="eyebrow">Context OS</p><h1 id="capture-title">생각 남기기</h1></div>
-            <div className="header-actions"><button className="summary-entry-button" type="button" onClick={openSummary}><Sparkles size={15} />오늘 요약</button><button className="icon-button" type="button" aria-label="생각 전체 조회" onClick={openThoughts}><Search size={17} /></button><button className="icon-button" type="button" aria-label="연결 설정" onClick={openSettings}><Settings size={17} /></button></div>
+            <div><p className="eyebrow">Context OS</p><h1 id="capture-title">{t('capture.title')}</h1></div>
+            <div className="header-actions"><button className="summary-entry-button" type="button" onClick={openSummary}><Sparkles size={15} />{t('capture.summary')}</button><button className="icon-button" type="button" aria-label={t('capture.searchThoughts')} onClick={openThoughts}><Search size={17} /></button><button className="icon-button" type="button" aria-label={t('capture.settings')} onClick={openSettings}><Settings size={17} /></button></div>
           </header>
           <div className="source-row">
             <Link2 size={17} aria-hidden="true" />
-            <div><span>현재 링크</span><strong>{activeTab?.title || '현재 탭을 불러오는 중…'}</strong><code>{activeTab?.url || ''}</code></div>
+            <div><span>{t('capture.currentLink')}</span><strong>{activeTab?.title || t('capture.loadingTab')}</strong><code>{activeTab?.url || ''}</code></div>
           </div>
-          {linkedThoughts.length > 0 ? <button className="related-thought" type="button" onClick={openLinkedThoughts}><span>여기서 기록했던 메모가 있어요</span><p>{linkedThoughts[0].data.content}</p><small>이 링크의 생각 전체 보기</small></button> : null}
+          {linkedThoughts.length > 0 ? <button className="related-thought" type="button" onClick={openLinkedThoughts}><span>{t('capture.relatedExists')}</span><p>{linkedThoughts[0].data.content}</p><small>{t('capture.viewLinkThoughts')}</small></button> : null}
           <label className="capture-field">
-            <span>내 메모</span>
+            <span>{t('capture.note')}</span>
             <textarea
               autoFocus
               value={note}
               onChange={(event) => setNote(event.target.value)}
               onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void saveCapture() } }}
-              placeholder="생각을 남기거나 짧게 메모하세요…"
+              placeholder={t('capture.notePlaceholder')}
             />
           </label>
-          <button className="primary-button" type="button" disabled={!canCapture} onClick={() => void saveCapture()}>{canCapture ? <><Send size={17} />기록 남기기</> : '새 탭 또는 웹페이지에서 기록할 수 있어요'}</button>
-          <p className="shortcut">⌘↵로 바로 저장 · 현재 링크는 자동으로 첨부됩니다.</p>
+          <button className="primary-button" type="button" disabled={!canCapture} onClick={() => void saveCapture()}>{canCapture ? <><Send size={17} />{t('capture.save')}</> : t('capture.unsupportedPageButton')}</button>
+          <p className="shortcut">{t('capture.shortcut')}</p>
         </section>
       )}
       {status ? <p className="capture-status" role="status">{status}</p> : null}
