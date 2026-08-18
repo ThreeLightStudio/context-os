@@ -9,25 +9,44 @@ pnpm install
 pnpm verify
 ```
 
-Keep changes scoped to the relevant app. Run the app-specific build and tests
-before opening a pull request. Do not commit API tokens, `.dev.vars`, `.env`
-files, captured context, `.wrangler` state, or generated `dist` output.
+Keep changes scoped to the relevant app. Run app-specific build tests before
+opening a pull request. Do not commit API tokens, `.dev.vars`, `.env` files,
+captured context, `.wrangler` state, generated `dist` output, or local
+configuration.
 
 ## Issues and change tracking
 
-Small documentation, formatting, typo, and isolated bug fixes may be committed
-directly when their scope is clear. For features, i18n, architecture, API or
-schema changes, and work spanning multiple packages, search for an existing
-Issue or open one before implementation.
+Small documentation, formatting, typo, or isolated bug fixes may be committed
+directly when the scope is clear. For features, i18n, architecture, API or
+schema changes, or work spanning multiple packages, search for an existing
+Issue or open one before implementation. Include motivation, scope, acceptance
+criteria, and a verification plan in a new Issue.
 
-Include the motivation, scope, acceptance criteria, and verification plan in a
-new Issue. Keep larger changes on a focused branch and connect the pull request
-to its Issue.
+Use the type-specific Issue template for tracked work. The template sets both
+the title prefix and the canonical native GitHub Issue Type:
 
-Use the type-specific Issue template. It adds the matching title prefix
-(`[feat]`, for example) and label (`type:<type>`). Set priority through the
-repository's configured Project field. The Issue label must match the type at
-the start of the branch name.
+| Work prefix | Native Issue Type |
+| --- | --- |
+| `feat` | `Feature` |
+| `fix` | `Bug` |
+| `refactor`, `docs`, `chore` | `Task` |
+
+The organization currently enables only these three native Issue Types, so the
+last three work prefixes intentionally map to `Task`. The work prefix remains
+the specific branch and PR classification. `type:*` labels are legacy and are
+not required for new Issues or pull requests; use `area:*` and `priority:*`
+labels for orthogonal dimensions. Set priority through the repository's
+configured Project field.
+
+## Issue Fields
+
+When creating tracked work, add the Issue to the configured Project and set
+the Project's `Priority` Field before implementation starts. Keep its
+`Status` Field aligned with the work lifecycle, using the configured
+in-progress value when work starts and the configured completed value after
+the work is merged. Do not use classification or priority labels as a
+substitute for native Issue Type or Project Fields. See
+[`docs/issue-field-guidance.md`](docs/issue-field-guidance.md).
 
 ## Branches
 
@@ -37,23 +56,19 @@ Create new branches with the repository CLI:
 pnpm branch feat 123 add-sso
 ```
 
-The supported types are `feat`, `fix`, `refactor`, `docs`, and `chore`. This
-creates a branch using the format `<type>/<issue-number>-<short-kebab-slug>`.
-Use the CLI before starting work so the branch name is valid from the outset.
+Supported types are `feat`, `fix`, `refactor`, `docs`, and `chore`. The CLI
+creates branches in the format `<type>/<issue-number>-<short-kebab-slug>` and
+should be used before work starts so the branch name is valid from the outset.
 
 ## Pull requests
 
-Use the title format `[type] Short summary (#issue-number)` and apply exactly
-one matching PR label, `type:<type>`. For example, a `feat/...` branch requires
-the `type:feat` PR label. The pull request workflow verifies this label.
+Use the title format `[type] Short summary (#issue-number)` and include an
+explicit closing reference such as `Fixes #123`. The linked Issue's native
+Type must match the source branch mapping above. The branch-name workflow
+checks the branch format, PR title, Issue reference, and native Issue Type; it
+does not require duplicate `type:*` labels on the Issue or PR.
 
-Describe the affected client/server, the user-visible behavior, and the
-verification commands you ran. In the related Issue section, replace the
-placeholder with `Fixes #<issue-number>` (or an equivalent closing keyword).
-The branch-name workflow verifies that this Issue number and its `type:<type>`
-label match the source branch. Use the PR title format
-`[type] Short summary (#issue-number)` and keep its type and summary aligned
-with the Issue title. GitHub closes the Issue when the pull request is merged
-into the default branch. Include screenshots or recordings for UI changes when
-useful. Do not include private captures or production configuration in
-screenshots, logs, or examples.
+Describe affected clients, servers, packages, user-visible behavior, breaking
+changes, and verification commands. Include screenshots or recordings when UI
+behavior changes, without private captures, production configuration, or
+credentials.

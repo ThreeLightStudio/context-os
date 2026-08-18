@@ -1,14 +1,14 @@
 name: Feature
 description: Propose a user-facing feature or capability.
 title: "[feat] "
-labels:
-  - "type:feat"
+type: feature
 body:
   - type: markdown
     attributes:
       value: |
-        After this issue is created, create the branch with:
+        This template assigns the native GitHub Issue Type `Feature`. After this issue is created, create the branch with:
         `pnpm branch feat <issue-number> <short-kebab-slug>`
+        Before implementation, add the issue to the configured Project and set its `Priority` Field.
 
   - type: textarea
     id: motivation
