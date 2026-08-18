@@ -129,6 +129,12 @@ public struct WhisperCppTranscriber: Sendable {
 
     public func transcribe(samples: [Int16], sampleRate: Int = 16_000) throws -> VoiceTranscript {
         guard !samples.isEmpty else { throw VoiceCaptureError.noAudio }
+        guard FileManager.default.isExecutableFile(atPath: executablePath) else {
+            throw VoiceCaptureError.transcriptionFailed("Whisper CLI is not executable: \(executablePath)")
+        }
+        guard FileManager.default.isReadableFile(atPath: modelPath) else {
+            throw VoiceCaptureError.transcriptionFailed("Whisper model is missing or unreadable: \(modelPath)")
+        }
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let id = UUID().uuidString
         let wavURL = temporaryDirectory.appendingPathComponent("context-voice-\(id).wav")
