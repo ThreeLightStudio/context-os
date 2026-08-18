@@ -119,7 +119,7 @@ pnpm --filter server-mcp start
 ```
 
 For the Streamable HTTP connection form, use `pnpm start:mcp:http`. It listens
-at `http://127.0.0.1:8789/mcp` and requires the separate
+at `http://127.0.0.1:17003/mcp` and requires the separate
 `CONTEXT_MCP_HTTP_TOKEN` bearer token. The default mode is read-only. Set
 `CONTEXT_MCP_MODE=read-write` only when the MCP client should be allowed to
 append records. See

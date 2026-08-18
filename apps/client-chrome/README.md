@@ -26,7 +26,7 @@ Load `dist/` as an unpacked extension in Chrome.
 
 새 설치에서는 먼저 **로컬로 시작** 또는 **Cloudflare D1 연결**을 선택합니다.
 Chrome만 사용할 때는 서버 없이 로컬로 시작할 수 있습니다. Raycast와 기록을
-공유하려면 연결 설정에서 로컬 `http://127.0.0.1:8787` 또는 내 Cloudflare
+공유하려면 연결 설정에서 로컬 `http://127.0.0.1:17001` 또는 내 Cloudflare
 Worker URL과 read/write API token을 함께 입력하세요. token은 확장 프로그램
 로컬 저장소에만 보관되며 백업 데이터나 화면에 포함되지 않습니다.
 
@@ -50,7 +50,7 @@ the selected local calendar date and the browser's IANA timezone to the local
 Brain Server, which reads Context records from `server-context` and returns a
 structured summary.
 
-The Brain Server address defaults to `http://127.0.0.1:8788`. Configure it in
+The Brain Server address defaults to `http://127.0.0.1:17002`. Configure it in
 `연결 설정` under `Brain Server`; a Brain API token is optional when the local
 server runs without `BRAIN_API_TOKEN`.
 
@@ -59,7 +59,7 @@ in `BRAIN_ALLOWED_ORIGINS`, for example:
 
 ```sh
 BRAIN_ALLOWED_ORIGINS=chrome-extension://<extension-id> \
-CONTEXT_SERVER_URL=http://127.0.0.1:8787 \
+CONTEXT_SERVER_URL=http://127.0.0.1:17001 \
 CONTEXT_SERVER_TOKEN=ctx_<token> \
 BRAIN_MODEL=<ollama-model> \
 pnpm --filter server-brain dev

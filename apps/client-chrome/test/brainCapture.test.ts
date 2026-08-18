@@ -19,7 +19,7 @@ describe('runDailySummary', () => {
       } }))
     })
 
-    await expect(runDailySummary({ endpointUrl: 'http://127.0.0.1:8788/', apiToken: 'brain-token' }, {
+    await expect(runDailySummary({ endpointUrl: 'http://127.0.0.1:17002/', apiToken: 'brain-token' }, {
       date: '2026-08-13',
       timezone: 'Asia/Seoul'
     }, fetchImpl)).resolves.toEqual({

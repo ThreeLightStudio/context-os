@@ -107,8 +107,8 @@
       "description": "Defaults to the local server-brain. Only the transcript, never audio, is sent here.",
       "type": "textfield",
       "required": false,
-      "default": "http://127.0.0.1:8788",
-      "placeholder": "http://127.0.0.1:8788"
+      "default": "http://127.0.0.1:17002",
+      "placeholder": "http://127.0.0.1:17002"
     },
     {
       "name": "brainApiToken",

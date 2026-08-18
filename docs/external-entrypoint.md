@@ -45,9 +45,9 @@ presence of a gateway.
 ### All local
 
 ```text
-server-context  http://127.0.0.1:8787  Wrangler + local D1
-server-mcp      stdio or http://127.0.0.1:8789/mcp
-server-brain    http://127.0.0.1:8788  + local OpenAI-compatible model
+server-context  http://127.0.0.1:17001  Wrangler + local D1
+server-mcp      stdio or http://127.0.0.1:17003/mcp
+server-brain    http://127.0.0.1:17002  + local OpenAI-compatible model
 ```
 
 Use this mode for development and offline work. The local ports are

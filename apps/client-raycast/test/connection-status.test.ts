@@ -9,8 +9,8 @@ test("describes missing Context Server settings", () => {
 });
 
 test("recognizes loopback Context Server URLs as local", () => {
-  assert.equal(describeContextConnection("http://127.0.0.1:8787", true).target, "local");
-  assert.equal(describeContextConnection("http://localhost:8787", true).target, "local");
+  assert.equal(describeContextConnection("http://127.0.0.1:17001", true).target, "local");
+  assert.equal(describeContextConnection("http://localhost:17001", true).target, "local");
 });
 
 test("describes non-loopback URLs as Cloudflare or external", () => {

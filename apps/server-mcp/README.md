@@ -7,8 +7,8 @@ does not access D1 directly.
 ## Local setup
 
 Keep the existing `server-context` API running on its configured port (the
-example uses `8787`). To expose the MCP endpoint for a client that provides a
-URI, start `server-mcp` on the reserved port `8789`:
+example uses `17001`). To expose the MCP endpoint for a client that provides a
+URI, start `server-mcp` on the reserved port `17003`:
 
 ```sh
 cp apps/server-mcp/.env.example apps/server-mcp/.env
@@ -20,7 +20,7 @@ pnpm --filter server-mcp start:http
 The Streamable HTTP endpoint is:
 
 ```text
-http://127.0.0.1:8789/mcp
+http://127.0.0.1:17003/mcp
 ```
 
 The bearer token in `CONTEXT_MCP_HTTP_TOKEN` protects the MCP endpoint. The
@@ -78,6 +78,6 @@ Claude Desktop uses the same `command` and `args` in its `mcpServers`
 configuration and passes the values through `env`.
 
 For the Streamable HTTP connection form shown in ChatGPT, choose
-`Streamable HTTP`, use `http://127.0.0.1:8789/mcp` as the URI, and configure the
+`Streamable HTTP`, use `http://127.0.0.1:17003/mcp` as the URI, and configure the
 bearer token environment variable to the value used for
 `CONTEXT_MCP_HTTP_TOKEN`.
