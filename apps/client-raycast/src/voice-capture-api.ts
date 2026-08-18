@@ -29,8 +29,12 @@ function socketPath() {
   return join(environment.supportPath, "v.sock");
 }
 
+function helperBundlePath() {
+  return join(environment.assetsPath, "context-voice-capture.app");
+}
+
 function helperPath() {
-  return join(environment.assetsPath, "context-voice-capture.app", "Contents", "MacOS", "context-voice-capture");
+  return join(helperBundlePath(), "Contents", "MacOS", "context-voice-capture");
 }
 
 function request(command: string, jobId?: string): Promise<VoiceResponse> {
@@ -89,10 +93,14 @@ export async function ensureVoiceHelper(): Promise<void> {
     let spawnErrorMessage: string | null = null;
     let exitCode: number | null = null;
     let exitSignal: NodeJS.Signals | null = null;
-    const child = spawn(executablePath, ["--socket", socketPath(), "--whisper-cli", cliPath, "--model", modelPath], {
-      detached: true,
-      stdio: "ignore",
-    });
+    const child = spawn(
+      "/usr/bin/open",
+      [helperBundlePath(), "--args", "--socket", socketPath(), "--whisper-cli", cliPath, "--model", modelPath],
+      {
+        detached: true,
+        stdio: "ignore",
+      },
+    );
     child.once("error", (error) => {
       spawnErrorMessage = error instanceof Error ? error.message : String(error);
     });

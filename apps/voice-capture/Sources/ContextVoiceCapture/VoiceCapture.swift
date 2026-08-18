@@ -385,12 +385,29 @@ public final class VoiceService: @unchecked Sendable {
     }
 
     private func capture() -> VoiceResponse {
+        stateLock.lock()
+        if let activeJob {
+            guard let job = jobs[activeJob] else {
+                stateLock.unlock()
+                return response(ok: true, jobId: activeJob)
+            }
+
+            if case .success = job {
+                stateLock.unlock()
+                return response(ok: true, jobId: activeJob)
+            }
+
+            jobs.removeValue(forKey: activeJob)
+            self.activeJob = nil
+            state = "stopped"
+        }
+        stateLock.unlock()
+
         let samples = buffer.snapshot()
         guard !samples.isEmpty else { return response(ok: false, error: VoiceCaptureError.noAudio.localizedDescription) }
         let stopped = stop()
         guard stopped.ok else { return stopped }
         let jobId = UUID().uuidString
-        buffer.clear()
         stateLock.lock(); activeJob = jobId; state = "transcribing"; stateLock.unlock()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -432,10 +449,14 @@ public final class VoiceService: @unchecked Sendable {
             return response(ok: false, jobId: jobId, error: VoiceCaptureError.jobNotReady.localizedDescription)
         }
         activeJob = nil
-        state = "stopped"
         switch result {
-        case .success(let transcript): return response(ok: true, jobId: jobId, transcript: transcript)
-        case .failure(let error): return response(ok: false, jobId: jobId, error: error.localizedDescription)
+        case .success(let transcript):
+            buffer.clear()
+            state = "stopped"
+            return response(ok: true, jobId: jobId, transcript: transcript)
+        case .failure(let error):
+            state = "error"
+            return response(ok: false, jobId: jobId, error: error.localizedDescription)
         }
     }
 
