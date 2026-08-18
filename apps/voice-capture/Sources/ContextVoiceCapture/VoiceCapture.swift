@@ -220,6 +220,7 @@ public struct WhisperCppTranscriber: Sendable {
     private static func writeWav(samples: [Int16], sampleRate: Int, to url: URL) throws {
         var data = Data()
         let byteCount = samples.count * MemoryLayout<Int16>.size
+        data.append(contentsOf: Array("RIFF".utf8))
         appendLittleEndian(UInt32(36 + byteCount), to: &data)
         data.append(contentsOf: Array("WAVE".utf8))
         data.append(contentsOf: Array("fmt ".utf8))
