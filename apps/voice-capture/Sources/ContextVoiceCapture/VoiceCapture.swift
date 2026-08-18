@@ -352,6 +352,15 @@ public final class VoiceService: @unchecked Sendable {
     private func start() -> VoiceResponse {
         stateLock.lock()
         if state == "listening" { stateLock.unlock(); return status() }
+        if state == "transcribing" {
+            let jobId = activeJob
+            stateLock.unlock()
+            return response(ok: false, jobId: jobId, error: "A transcription is already in progress.")
+        }
+        if let activeJob, jobs[activeJob] != nil {
+            jobs.removeValue(forKey: activeJob)
+            self.activeJob = nil
+        }
         stateLock.unlock()
         let input = AudioInput(buffer: buffer)
         do {
@@ -445,16 +454,18 @@ public final class VoiceService: @unchecked Sendable {
     private func consume(jobId: String?) -> VoiceResponse {
         guard let jobId else { return response(ok: false, error: "jobId is required.") }
         stateLock.lock(); defer { stateLock.unlock() }
-        guard let result = jobs.removeValue(forKey: jobId) else {
+        guard let result = jobs[jobId] else {
             return response(ok: false, jobId: jobId, error: VoiceCaptureError.jobNotReady.localizedDescription)
         }
-        activeJob = nil
         switch result {
         case .success(let transcript):
             buffer.clear()
+            activeJob = jobId
             state = "stopped"
             return response(ok: true, jobId: jobId, transcript: transcript)
         case .failure(let error):
+            jobs.removeValue(forKey: jobId)
+            activeJob = nil
             state = "error"
             return response(ok: false, jobId: jobId, error: error.localizedDescription)
         }
