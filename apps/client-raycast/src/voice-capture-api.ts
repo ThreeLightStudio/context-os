@@ -37,11 +37,11 @@ function helperPath() {
   return join(helperBundlePath(), "Contents", "MacOS", "context-voice-capture");
 }
 
-function request(command: string, jobId?: string): Promise<VoiceResponse> {
+function request(command: string, jobId?: string, timeoutMs = 10_000): Promise<VoiceResponse> {
   return new Promise((resolve, reject) => {
     const socket = createConnection({ path: socketPath() });
     let response = "";
-    socket.setTimeout(10_000);
+    socket.setTimeout(timeoutMs);
     socket.on("connect", () => socket.write(`${JSON.stringify({ command, ...(jobId ? { jobId } : {}) })}\n`));
     socket.on("data", (chunk) => {
       response += chunk.toString("utf8");
@@ -63,10 +63,10 @@ function request(command: string, jobId?: string): Promise<VoiceResponse> {
 }
 
 async function waitForHelper(): Promise<void> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     try {
-      const result = await request("status");
+      const result = await request("status", undefined, 500);
       if (result.ok) return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -78,7 +78,7 @@ async function waitForHelper(): Promise<void> {
 export async function ensureVoiceHelper(): Promise<void> {
   if (process.platform !== "darwin") throw new Error("Voice Capture is currently supported on macOS only.");
   try {
-    await request("status");
+    await request("status", undefined, 500);
     return;
   } catch {
     const configured = getVoicePreferences();
