@@ -133,6 +133,17 @@ async function listRecords(url: URL, env: Env, request: Request): Promise<Respon
   return json({ records: rows.map(toApiRecord), nextCursor: hasMore ? encodeCursor(rows.at(-1)!) : null }, request, env);
 }
 
+async function getRecord(id: string, env: Env, request: Request): Promise<Response> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return error(400, "id must be a UUID", request, env);
+  }
+  const row = await env.DB.prepare("SELECT id, recorded_at, received_at, schema_version, data FROM records WHERE id = ?")
+    .bind(id.toLowerCase())
+    .first<StoredRecord>();
+  if (!row) return error(404, "record not found", request, env);
+  return json({ record: toApiRecord(row) }, request, env);
+}
+
 async function deleteRecord(id: string, env: Env, request: Request): Promise<Response> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return error(400, "id must be a UUID", request, env);
   const result = await env.DB.prepare("DELETE FROM records WHERE id = ?").bind(id.toLowerCase()).run();
@@ -146,7 +157,7 @@ export default {
     const isCollection = url.pathname === "/v1/records";
     const recordId = url.pathname.match(/^\/v1\/records\/([^/]+)$/)?.[1];
     try {
-      if (isCollection && request.method === "OPTIONS") {
+      if ((isCollection || recordId !== undefined) && request.method === "OPTIONS") {
         if (!isOriginAllowed(request, env)) return error(403, "origin is not allowed", request, env);
         return new Response(null, {
           status: 204,
@@ -163,6 +174,11 @@ export default {
         await enforceRateLimit(request, "GET", env);
         await requireScope(request, env, "read");
         return await listRecords(url, env, request);
+      }
+      if (recordId && request.method === "GET") {
+        await enforceRateLimit(request, "GET", env);
+        await requireScope(request, env, "read");
+        return await getRecord(recordId, env, request);
       }
       if (recordId && request.method === "DELETE") {
         await enforceRateLimit(request, "DELETE", env);

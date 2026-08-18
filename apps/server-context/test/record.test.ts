@@ -23,4 +23,16 @@ describe("parseCreateRecord", () => {
     const result = parseCreateRecord({ ...valid, recordedAt: "2026-07-25T09:00:00.000+09:00" });
     expect(result.recordedAt).toBe("2026-07-25T00:00:00.000Z");
   });
+  it("normalizes and validates append-only revision metadata", () => {
+    const contextId = "01983f0d-7b32-7b4d-8d5b-8ff24c3b1001";
+    const previousRecordId = "01983f0d-7b32-7b4d-8d5b-8ff24c3b1002";
+    const result = parseCreateRecord({
+      ...valid,
+      data: { ...valid.data, contextId: contextId.toUpperCase(), revision: 2, previousRecordId: previousRecordId.toUpperCase() },
+    });
+    expect(result.data.contextId).toBe(contextId);
+    expect(result.data.revision).toBe(2);
+    expect(result.data.previousRecordId).toBe(previousRecordId);
+    expect(() => parseCreateRecord({ ...valid, data: { ...valid.data, revision: 2 } })).toThrow("contextId is required");
+  });
 });

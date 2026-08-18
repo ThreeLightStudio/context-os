@@ -60,6 +60,12 @@ describe("Streamable HTTP MCP integration", () => {
   it("authenticates the endpoint and serves MCP tools over /mcp", async () => {
     contextServer = createServer(async (request, response) => {
       expect(request.headers.authorization).toBe("Bearer ctx_test");
+      const recordId = request.url?.match(/^\/v1\/records\/([^?]+)$/)?.[1];
+      if (request.method === "GET" && recordId) {
+        const record = records.find((candidate) => candidate.id === decodeURIComponent(recordId));
+        json(response, record ? 200 : 404, record ? { record } : { error: "not found" });
+        return;
+      }
       if (request.method === "GET" && request.url?.startsWith("/v1/records")) {
         json(response, 200, { records, nextCursor: null });
         return;
@@ -98,9 +104,17 @@ describe("Streamable HTTP MCP integration", () => {
     await client.connect(transport);
 
     const listed = await client.listTools();
-    expect(listed.tools.map((tool) => tool.name)).toEqual(["get_active_work", "get_recent_context", "get_work_context"]);
-    const result = await client.callTool({ name: "get_active_work", arguments: {} });
+    expect(listed.tools.map((tool) => tool.name)).toEqual([
+      "search_context",
+      "get_context",
+      "get_recent_contexts",
+      "get_active_context",
+      "get_active_work",
+      "get_recent_context",
+      "get_work_context",
+    ]);
+    const result = await client.callTool({ name: "get_active_context", arguments: {} });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({ activeWork: { name: "Context OS" } });
+    expect(result.structuredContent).toMatchObject({ activeContext: { name: "Context OS" } });
   });
 });

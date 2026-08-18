@@ -170,6 +170,28 @@ describe("record API security", () => {
     expect(db.records.has(payload.id)).toBe(false);
   });
 
+  it("reads one record through the canonical id endpoint", async () => {
+    const db = new FakeDb();
+    db.records.set(payload.id, {
+      id: payload.id,
+      recorded_at: "2026-07-25T00:00:00.000Z",
+      received_at: "2026-08-05T00:00:00.000Z",
+      schema_version: 1,
+      data: JSON.stringify(payload.data),
+    });
+    const token = await setupToken(db, { read: true });
+    const response = await worker.fetch(request(`/v1/records/${payload.id}`, { headers: { authorization: `Bearer ${token}` } }), env(db));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ record: { id: payload.id, data: payload.data } });
+  });
+
+  it("returns 404 when the canonical id endpoint cannot find a record", async () => {
+    const db = new FakeDb();
+    const token = await setupToken(db, { read: true });
+    const response = await worker.fetch(request(`/v1/records/${payload.id}`, { headers: { authorization: `Bearer ${token}` } }), env(db));
+    expect(response.status).toBe(404);
+  });
+
   it("filters records by an exact browser URL without changing cursor pagination or full-history reads", async () => {
     const db = new FakeDb();
     const matchingUrl = "https://example.test/project?view=all";

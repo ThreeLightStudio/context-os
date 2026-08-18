@@ -115,3 +115,15 @@ pnpm --filter server-brain verify
 ```
 
 Tests use mock providers and do not download or start a real model.
+
+## 외부 진입점과 운영 방식
+
+`server-brain`은 Context OS의 Intelligence/Execution Layer이며, `server-context`의 D1 경계와 분리된 로컬 우선 Node 서비스입니다. public gateway를 도입해도 Brain 연산이 `server-context` Worker 안으로 이동하지 않습니다.
+
+초기 외부 경로 계약에서 `/brain/v1/*`은 local-only 예약 경로입니다. 실제 reverse proxy, Cloudflare gateway, Tunnel 또는 hosting provider와의 연결은 후속 배포 작업이며 이 패키지의 로컬 실행 방식은 그대로 유지됩니다.
+
+- 전부 로컬: `server-context`(Wrangler/local D1), `server-mcp`(stdio 또는 로컬 HTTP), `server-brain`(로컬 Node + local LLM)
+- Hybrid: `server-brain`은 로컬에서 실행하고 `CONTEXT_SERVER_URL`로 배포된 `server-context` Worker를 호출
+- Public gateway: `/v1/*`은 `server-context`, `/mcp`는 `server-mcp`로 전달하며 `/brain/v1/*`은 초기 공개 대상이 아님
+
+로컬 `BRAIN_PORT`와 `CONTEXT_SERVER_URL`의 개발 주소는 운영 public API 계약이 아닙니다. 상세한 경로 계약과 구성 예시는 [`../../docs/external-entrypoint.md`](../../docs/external-entrypoint.md)를 참고하세요.

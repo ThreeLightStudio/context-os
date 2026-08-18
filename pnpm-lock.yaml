@@ -303,6 +303,15 @@ importers:
         specifier: ^4.30.0
         version: 4.120.0(@cloudflare/workers-types@5.20260804.1)
 
+  apps/server-gateway:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.19.17)(supports-color@10.2.2)
+
   apps/server-mcp:
     dependencies:
       '@modelcontextprotocol/server':

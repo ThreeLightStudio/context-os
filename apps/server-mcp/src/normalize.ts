@@ -26,6 +26,9 @@ export function normalizeRecord(record: ContextRecord, state: WorkState): Normal
 
   return {
     id: record.id,
+    contextId: record.data.contextId ?? record.id,
+    revision: record.data.revision ?? 1,
+    ...(record.data.previousRecordId ? { previousRecordId: record.data.previousRecordId } : {}),
     recordedAt: record.recordedAt,
     receivedAt: record.receivedAt,
     type,

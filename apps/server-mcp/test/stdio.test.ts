@@ -39,6 +39,12 @@ function json(response: ServerResponse, status: number, body: unknown) {
 async function startContextApi() {
   httpServer = createServer(async (request, response) => {
     expect(request.headers.authorization).toBe("Bearer ctx_test");
+    const recordId = request.url?.match(/^\/v1\/records\/([^?]+)$/)?.[1];
+    if (request.method === "GET" && recordId) {
+      const record = records.find((candidate) => candidate.id === decodeURIComponent(recordId));
+      json(response, record ? 200 : 404, record ? { record } : { error: "not found" });
+      return;
+    }
     if (request.method === "GET" && request.url?.startsWith("/v1/records")) {
       json(response, 200, { records, nextCursor: null });
       return;
@@ -83,13 +89,21 @@ describe("stdio MCP integration", () => {
     await client.connect(transport);
 
     const listed = await client.listTools();
-    expect(listed.tools.map((tool) => tool.name)).toEqual(["get_active_work", "get_recent_context", "get_work_context"]);
-    const result = await client.callTool({ name: "get_active_work", arguments: {} });
+    expect(listed.tools.map((tool) => tool.name)).toEqual([
+      "search_context",
+      "get_context",
+      "get_recent_contexts",
+      "get_active_context",
+      "get_active_work",
+      "get_recent_context",
+      "get_work_context",
+    ]);
+    const result = await client.callTool({ name: "get_active_context", arguments: {} });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({ activeWork: { name: "Context OS" } });
+    expect(result.structuredContent).toMatchObject({ activeContext: { name: "Context OS" } });
   });
 
-  it("registers append_context only in read-write mode", async () => {
+  it("registers canonical write tools only in read-write mode and appends revisions", async () => {
     const port = await startContextApi();
     const transport = new StdioClientTransport({
       command: process.execPath,
@@ -106,9 +120,27 @@ describe("stdio MCP integration", () => {
     await client.connect(transport);
 
     const listed = await client.listTools();
-    expect(listed.tools.map((tool) => tool.name)).toContain("append_context");
-    const result = await client.callTool({ name: "append_context", arguments: { type: "decision", work: "Context OS", content: "Use stdio" } });
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({ record: { type: "decision", content: "Use stdio" } });
+    expect(listed.tools.map((tool) => tool.name)).toEqual([
+      "search_context",
+      "get_context",
+      "get_recent_contexts",
+      "get_active_context",
+      "get_active_work",
+      "get_recent_context",
+      "get_work_context",
+      "create_context",
+      "update_context",
+      "append_context",
+    ]);
+    const created = await client.callTool({ name: "create_context", arguments: { type: "decision", work: "Context OS", content: "Use stdio" } });
+    expect(created.isError).not.toBe(true);
+    expect(created.structuredContent).toMatchObject({ record: { type: "decision", content: "Use stdio", revision: 1 } });
+    const createdRecord = (created.structuredContent as { record: { id: string; contextId: string } }).record;
+
+    const updated = await client.callTool({ name: "update_context", arguments: { id: createdRecord.id, content: "Use stdio and HTTP" } });
+    expect(updated.isError).not.toBe(true);
+    expect(updated.structuredContent).toMatchObject({
+      record: { contextId: createdRecord.contextId, revision: 2, previousRecordId: createdRecord.id, content: "Use stdio and HTTP" },
+    });
   });
 });

@@ -133,3 +133,15 @@ pnpm --filter server-brain start
 - Cloudflare에서 기기를 분실하거나 token이 노출되면 `pnpm token:revoke -- --remote --id <token-id>`로 즉시 폐기하고 새 token을 만듭니다.
 - 같은 Chrome 확장 ID에서는 패널·탭 전환 후에도 연결 설정이 유지됩니다. `저장된 설정을 열지 못했습니다`가 표시되면 새 모드를 선택하지 말고 **다시 시도**해 기존 Chrome 저장소를 보호하세요.
 - 이미 과거 버전에서 삭제된 Cloudflare URL이나 token은 복구할 수 없습니다. URL과 token을 한 번 다시 입력하고 **연결 확인 및 저장**을 실행하세요.
+
+## 외부 진입점 운영 모델
+
+Context OS의 서비스는 하나로 합쳐지지 않습니다. 선택적인 gateway가 단일 public origin 뒤에서 다음 경로를 서비스별로 전달할 수 있습니다.
+
+- `/v1/*` → `server-context`
+- `/mcp` → `server-mcp`
+- `/brain/v1/*` → 초기에는 local-only 예약 경로
+
+따라서 `server-context`는 계속 Wrangler/local D1 또는 배포된 Cloudflare Worker로 실행하고, `server-mcp`와 `server-brain`은 로컬 프로세스로 실행하거나 배포된 Context Worker를 호출하는 Hybrid 구성으로 사용할 수 있습니다. public gateway를 선택하더라도 기존 Worker 배포, D1, migration, token 운영은 바뀌지 않습니다. 로컬 포트는 개발용이며 public API 계약이 아닙니다.
+
+전체 구성 예시는 [`external-entrypoint.md`](external-entrypoint.md)를 참고하세요.
