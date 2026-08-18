@@ -13,7 +13,9 @@ intent, and map to the native Types enabled by the organization:
 | `chore` | `Task` |
 
 The `type:*` labels are legacy classification metadata. They are not added by
-new Issue templates and are not required on Issues or pull requests. Existing
+new Issue templates and are not required on Issues or pull requests. Do not
+recreate a removed `type:*` label; native GitHub Issue Type is authoritative.
+Existing
 Issues have been migrated to native Types and their classification labels
 removed; branch prefixes and PR titles retain the more specific work
 classification.
