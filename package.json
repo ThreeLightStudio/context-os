@@ -32,7 +32,8 @@
     "server:deploy": "pnpm --filter server-context run deploy",
     "server:token:create": "pnpm --filter server-context token:create",
     "server:token:list": "pnpm --filter server-context token:list",
-    "server:token:revoke": "pnpm --filter server-context token:revoke"
+    "server:token:revoke": "pnpm --filter server-context token:revoke",
+    "cleanup:merged": "node scripts/cleanup-merged.mjs"
   },
   "devDependencies": {
     "turbo": "2.10.9"
