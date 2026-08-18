@@ -26,8 +26,7 @@ interface VoiceResponse {
 }
 
 function socketPath() {
-  const userId = typeof process.getuid === "function" ? process.getuid() : "user";
-  return join("/tmp", `context-os-voice-${userId}.sock`);
+  return join(environment.supportPath, "v.sock");
 }
 
 function helperPath() {
