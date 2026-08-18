@@ -152,14 +152,15 @@ public struct WhisperCppTranscriber: Sendable {
         process.arguments = [
             "-m", modelPath,
             "-f", wavURL.path,
-            "-oj",
+            "-ojf",
             "-of", outputURL.path,
             "-l", "auto",
-            "-nt",
             "-ng",
         ]
         let errorPipe = Pipe()
+        let outputPipe = Pipe()
         process.standardError = errorPipe
+        process.standardOutput = outputPipe
         do {
             try process.run()
         } catch {
@@ -178,7 +179,15 @@ public struct WhisperCppTranscriber: Sendable {
             throw VoiceCaptureError.transcriptionFailed("whisper.cpp exited with code \(process.terminationStatus): \(message)")
         }
         guard FileManager.default.fileExists(atPath: jsonURL.path) else {
-            throw VoiceCaptureError.transcriptionFailed("whisper.cpp did not produce JSON output")
+            let errorOutput = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let standardOutput = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let details = [errorOutput, standardOutput]
+                .compactMap { $0?.isEmpty == false ? $0 : nil }
+                .joined(separator: " ")
+            let suffix = details.isEmpty ? "" : " Output: \(details)"
+            throw VoiceCaptureError.transcriptionFailed("whisper.cpp did not produce JSON output at \(jsonURL.path).\(suffix)")
         }
         do {
             return try Self.parseWhisperJSON(Data(contentsOf: jsonURL))
