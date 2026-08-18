@@ -129,6 +129,10 @@ public struct WhisperCppTranscriber: Sendable {
 
     public func transcribe(samples: [Int16], sampleRate: Int = 16_000) throws -> VoiceTranscript {
         guard !samples.isEmpty else { throw VoiceCaptureError.noAudio }
+        let peakAmplitude = samples.reduce(0) { max($0, abs(Int($1))) }
+        guard peakAmplitude > 0 else {
+            throw VoiceCaptureError.transcriptionFailed("Microphone buffer contains no signal (\(samples.count) samples).")
+        }
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
             throw VoiceCaptureError.transcriptionFailed("Whisper CLI is not executable: \(executablePath)")
         }
@@ -291,7 +295,7 @@ private final class AudioInput: @unchecked Sendable {
     }
 
     private let engine = AVAudioEngine()
-    private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)!
+    private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false)!
     private let buffer: LockedBuffer
     private var converter: AVAudioConverter?
 
@@ -307,7 +311,10 @@ private final class AudioInput: @unchecked Sendable {
             throw VoiceCaptureError.permissionDenied
         }
         let input = engine.inputNode
-        let inputFormat = input.inputFormat(forBus: 0)
+        let inputFormat = input.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw VoiceCaptureError.transcriptionFailed("Microphone input format is unavailable.")
+        }
         converter = AVAudioConverter(from: inputFormat, to: outputFormat)
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] audioBuffer, _ in
