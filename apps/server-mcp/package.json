@@ -1,0 +1,31 @@
+{
+  "name": "server-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Context OS MCP adapter for the server-context API.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm build && node --env-file-if-exists=.env --watch dist/index.js",
+    "dev:http": "pnpm build && CONTEXT_MCP_TRANSPORT=streamable-http node --env-file-if-exists=.env --watch dist/index.js",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "start:http": "CONTEXT_MCP_TRANSPORT=streamable-http node --env-file-if-exists=.env dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm build && vitest run",
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^22.19.17",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
