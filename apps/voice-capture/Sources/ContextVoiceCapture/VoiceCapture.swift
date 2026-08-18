@@ -150,6 +150,7 @@ public struct WhisperCppTranscriber: Sendable {
             "-of", outputURL.path,
             "-l", "auto",
             "-nt",
+            "-ng",
         ]
         let errorPipe = Pipe()
         process.standardError = errorPipe
@@ -161,8 +162,14 @@ public struct WhisperCppTranscriber: Sendable {
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw VoiceCaptureError.transcriptionFailed(message?.isEmpty == false ? message! : "whisper.cpp failed")
+            let diagnostics = String(data: errorData, encoding: .utf8)?
+                .split(whereSeparator: \.isNewline)
+                .map(String.init)
+                .filter { !$0.hasPrefix("load_backend:") && !$0.contains("tensor API disabled") }
+                .suffix(4)
+                .joined(separator: " ")
+            let message = diagnostics?.isEmpty == false ? diagnostics! : "whisper.cpp failed"
+            throw VoiceCaptureError.transcriptionFailed("whisper.cpp exited with code \(process.terminationStatus): \(message)")
         }
         guard FileManager.default.fileExists(atPath: jsonURL.path) else {
             throw VoiceCaptureError.transcriptionFailed("whisper.cpp did not produce JSON output")
