@@ -62,7 +62,7 @@ curl -X POST http://localhost:8787/v1/records \
 
 The client creates the UUID. Repeating the exact same request returns `200` with `idempotent: true`; reusing the ID with different content returns `409`.
 
-`GET /v1/records?limit=50&cursor=<cursor>` lists newest records first by the actual instant represented by `recordedAt`. `limit` is 1–100; the opaque cursor is returned as `nextCursor`. Add an encoded `url` query parameter to return only captures whose `context.browser.url` is exactly that URL; it is intended for the Chrome linked-thought lookup and does not match by domain or origin.
+`GET /v1/records?limit=50&cursor=<cursor>` lists newest records first by the actual instant represented by `recordedAt`. `limit` is 1–100; the opaque cursor is returned as `nextCursor`. `GET /v1/records/:id` returns `{ "record": ... }` for one record and requires `read` scope. Add an encoded `url` query parameter to return only captures whose `context.browser.url` is exactly that URL; it is intended for the Chrome linked-thought lookup and does not match by domain or origin.
 
 `DELETE /v1/records/:id` permanently removes one record and returns `204`; it returns `404` if the record does not exist. It requires a token with the `delete` scope.
 
@@ -93,7 +93,7 @@ The create command prints the raw token once. Store it in the client or a passwo
 
 Allowed browser metadata is `context.browser.url`, `title`, and `selectedText`; desktop metadata is `activeApplication` and `windowTitle`; mobile metadata is `sharedUrl`, `sharedTitle`, and `captureSurface`.
 
-The repository does not implement file or screenshot upload. Attachments, HTML, DOM/page content, and arbitrary metadata are rejected by the record validator.
+MCP-created records may also include `contextId`, `revision`, and `previousRecordId`; these fields describe append-only revisions and do not permit in-place mutation. The repository does not implement file or screenshot upload. Attachments, HTML, DOM/page content, and arbitrary metadata are rejected by the record validator.
 
 ## Deploy
 

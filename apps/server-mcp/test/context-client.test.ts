@@ -31,6 +31,16 @@ describe("ContextApiClient", () => {
     await expect(client.createRecord(record)).resolves.toMatchObject({ idempotent: false });
   });
 
+  it("reads one record through the canonical Context API endpoint", async () => {
+    const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      expect(String(input)).toBe(`http://context.test/v1/records/${record.id}`);
+      expect(init?.headers).toEqual({ Accept: "application/json", Authorization: "Bearer ctx_test" });
+      return new Response(JSON.stringify({ record }));
+    });
+    const client = new ContextApiClient({ serverUrl: "http://context.test", apiToken: "ctx_test", fetchImpl });
+    await expect(client.getRecord(record.id)).resolves.toEqual(record);
+  });
+
   it.each([
     [401, "context_authentication", false],
     [403, "context_forbidden", false],

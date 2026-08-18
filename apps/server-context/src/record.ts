@@ -7,6 +7,9 @@ const MAX_SELECTED_TEXT_BYTES = 64 * 1024;
 export type CaptureData = {
   kind: "capture";
   content: string;
+  contextId?: string;
+  revision?: number;
+  previousRecordId?: string;
   source: {
     client: "chrome" | "desktop" | "mobile" | "raycast";
     clientVersion?: string;
@@ -70,6 +73,21 @@ function optionalString(value: unknown, name: string, maxBytes: number): string 
   return requiredString(value, name, maxBytes);
 }
 
+function optionalUuid(value: unknown, name: string): string | undefined {
+  const normalized = optionalString(value, name, 64);
+  if (normalized === undefined) return undefined;
+  if (!uuidPattern.test(normalized)) throw new ValidationError(`${name} must be a UUID`);
+  return normalized.toLowerCase();
+}
+
+function optionalRevision(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 1_000_000) {
+    throw new ValidationError("data.revision must be an integer from 1 to 1000000");
+  }
+  return Number(value);
+}
+
 function omitEmpty<T extends Record<string, unknown>>(value: T): T | undefined {
   const entries = Object.entries(value).filter(([, item]) => item !== undefined && item !== "");
   return entries.length === 0 ? undefined : Object.fromEntries(entries) as T;
@@ -126,7 +144,7 @@ export function parseCreateRecord(input: unknown): NormalizedRecord {
     throw new ValidationError("schemaVersion must be 1");
   }
   const data = object(payload.data, "data");
-  onlyKeys(data, ["kind", "content", "source", "context"], "data");
+  onlyKeys(data, ["kind", "content", "contextId", "revision", "previousRecordId", "source", "context"], "data");
   if (data.kind !== "capture") throw new ValidationError("data.kind must be capture");
   const source = object(data.source, "data.source");
   onlyKeys(source, ["client", "clientVersion", "deviceId", "inputMethod"], "data.source");
@@ -138,9 +156,18 @@ export function parseCreateRecord(input: unknown): NormalizedRecord {
     deviceId: optionalString(source.deviceId, "data.source.deviceId", MAX_SHORT_TEXT_BYTES),
     inputMethod: optionalString(source.inputMethod, "data.source.inputMethod", MAX_SHORT_TEXT_BYTES),
   });
+  const contextId = optionalUuid(data.contextId, "data.contextId");
+  const revision = optionalRevision(data.revision);
+  const previousRecordId = optionalUuid(data.previousRecordId, "data.previousRecordId");
+  if ((revision !== undefined || previousRecordId !== undefined) && contextId === undefined) {
+    throw new ValidationError("data.contextId is required for revision metadata");
+  }
   const normalizedData: CaptureData = {
     kind: "capture",
     content: requiredString(data.content, "data.content", MAX_CAPTURE_BYTES),
+    ...(contextId ? { contextId } : {}),
+    ...(revision !== undefined ? { revision } : {}),
+    ...(previousRecordId ? { previousRecordId } : {}),
     source: {
       client: source.client as CaptureData["source"]["client"],
       ...(sourceOptional ?? {}),

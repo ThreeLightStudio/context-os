@@ -11,7 +11,8 @@ apps/
 ├── client-raycast/  # Raycast extension
 ├── server-context/  # Cloudflare Worker + D1 Context/Data API
 ├── server-brain/    # Local-first AI orchestration and execution API
-└── server-mcp/      # Local stdio MCP adapter for Context OS
+├── server-mcp/      # Local stdio MCP adapter for Context OS
+└── server-gateway/  # Provider-neutral external entry-point contract
 ```
 
 `client-mobile/` is reserved for a future mobile client. Shared packages will
@@ -159,6 +160,18 @@ generated `apps/client-raycast/dist` using Raycast's **Import Extension** action
 and verify that the existing extension is updated rather than installed as a
 second command set. Confirm the Context Settings command and run one capture
 before removing or disabling any older installation.
+
+## 외부 진입점과 운영 방식
+
+Context OS는 서비스를 하나로 합치지 않고, 선택적인 단일 public origin 뒤에서 경로로 분리해 운영할 수 있습니다.
+
+- `/v1/*` → `server-context`
+- `/mcp` → `server-mcp`
+- `/brain/v1/*` → 초기에는 local-only 예약 경로
+
+지원하는 운영 방식은 전부 로컬, Hybrid, Public gateway입니다. 전부 로컬에서는 `server-context`를 Wrangler/local D1, `server-mcp`를 stdio 또는 로컬 HTTP, `server-brain`을 로컬 Node와 local LLM으로 실행합니다. Hybrid에서는 로컬 MCP/Brain이 배포된 Context Worker를 호출하고, Public gateway에서는 하나의 origin이 `/v1/*`와 `/mcp`를 각 서비스로 전달합니다. 초기에는 `/brain/v1/*`을 외부에 공개하지 않습니다.
+
+로컬 포트는 개발용이며 public API 계약이 아닙니다. 기존 `server-context` Worker, D1, migration, token 운영과 직접 Worker URL을 사용하는 기존 클라이언트는 변경 없이 유지됩니다. 자세한 경계와 구성 예시는 [`docs/external-entrypoint.md`](docs/external-entrypoint.md)를 참고하세요.
 
 ## License
 

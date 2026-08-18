@@ -11,6 +11,9 @@ export type ContextRecord = {
   data: {
     kind: "capture";
     content: string;
+    contextId?: string;
+    revision?: number;
+    previousRecordId?: string;
     source: ContextSource;
     context?: Record<string, unknown>;
     [key: string]: unknown;
@@ -27,6 +30,10 @@ export type CreateRecordResponse = {
   idempotent: boolean;
 };
 
+export type GetRecordResponse = {
+  record: ContextRecord;
+};
+
 export type McpContextType = "capture" | "decision" | "insight" | "next";
 
 export type Work = {
@@ -39,6 +46,9 @@ export type WorkAssociation = "explicit" | "timeline-derived";
 
 export type NormalizedContextRecord = {
   id: string;
+  contextId: string;
+  revision: number;
+  previousRecordId?: string;
   recordedAt: string;
   receivedAt: string;
   type: string;

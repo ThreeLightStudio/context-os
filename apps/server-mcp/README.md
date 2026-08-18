@@ -35,8 +35,19 @@ pnpm --filter server-mcp build
 pnpm --filter server-mcp start
 ```
 
-The default `CONTEXT_MCP_MODE=read` registers the three read tools. Set
-`CONTEXT_MCP_MODE=read-write` to register `append_context` as well.
+The default `CONTEXT_MCP_MODE=read` registers the canonical read tools:
+`search_context`, `get_context`, `get_recent_contexts`, and
+`get_active_context`. Set `CONTEXT_MCP_MODE=read-write` to add
+`create_context` and `update_context`. The previous names remain available as
+deprecated compatibility aliases. `update_context` appends a new revision and
+never modifies an existing Context record.
+
+The Streamable HTTP path is `/mcp` both locally and behind the external-entry
+point contract. `server-mcp` continues to call `server-context` over its HTTP
+API and has no D1 dependency.
+
+For all-local, hybrid, and public-gateway operating modes, see
+[`docs/external-entrypoint.md`](../../docs/external-entrypoint.md).
 
 ## Verification
 

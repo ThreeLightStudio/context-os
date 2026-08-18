@@ -34,9 +34,10 @@ the title prefix and the canonical native GitHub Issue Type:
 The organization currently enables only these three native Issue Types, so the
 last three work prefixes intentionally map to `Task`. The work prefix remains
 the specific branch and PR classification. `type:*` labels are legacy and are
-not required for new Issues or pull requests; use `area:*` and `priority:*`
-labels for orthogonal dimensions. Set priority through the repository's
-configured Project field.
+not required for new Issues or pull requests. Never recreate a removed
+`type:*` label; use native GitHub Issue Type for classification. Use `area:*`
+and `priority:*` labels for orthogonal dimensions. Set priority through the
+repository's configured Project field.
 
 ## Issue Fields
 
