@@ -10,7 +10,8 @@ apps/
 ├── client-chrome/   # Local-first Chrome extension
 ├── client-raycast/  # Raycast extension
 ├── server-context/  # Cloudflare Worker + D1 Context/Data API
-└── server-brain/    # Local-first AI orchestration and execution API
+├── server-brain/    # Local-first AI orchestration and execution API
+└── server-mcp/      # Local stdio MCP adapter for Context OS
 ```
 
 `client-mobile/` is reserved for a future mobile client. Shared packages will
@@ -32,6 +33,7 @@ pnpm dev:chrome
 pnpm dev:raycast
 pnpm dev:server
 pnpm dev:brain
+pnpm dev:mcp
 ```
 
 Build the client bundles:
@@ -102,6 +104,26 @@ pnpm --filter server-brain start
 owns Actions, Context resolution hooks, model providers, and task lifecycle.
 이는 선택 기능입니다. 모델 제공자 설정과 API 예시는
 [`apps/server-brain/README.md`](apps/server-brain/README.md)를 참조하세요.
+
+## Context OS MCP Server
+
+`apps/server-mcp` exposes read and append-only Context OS tools through stdio or
+Streamable HTTP MCP transport. It calls `server-context` over its existing HTTP
+API and never accesses D1 directly.
+
+```sh
+cp apps/server-mcp/.env.example apps/server-mcp/.env
+pnpm --filter server-mcp build
+pnpm --filter server-mcp start
+```
+
+For the Streamable HTTP connection form, use `pnpm start:mcp:http`. It listens
+at `http://127.0.0.1:8789/mcp` and requires the separate
+`CONTEXT_MCP_HTTP_TOKEN` bearer token. The default mode is read-only. Set
+`CONTEXT_MCP_MODE=read-write` only when the MCP client should be allowed to
+append records. See
+[`apps/server-mcp/README.md`](apps/server-mcp/README.md) for Codex and Claude
+Desktop and ChatGPT connection examples.
 
 ## Migrating existing installations
 
