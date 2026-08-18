@@ -20,7 +20,7 @@ function preferences(): VoicePreferences {
 }
 
 function endpoint(value: string): string {
-  const url = new URL(value.trim() || "http://127.0.0.1:8788");
+  const url = new URL(value.trim() || "http://127.0.0.1:17002");
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Brain URL must use http or https.");
   url.pathname = `${url.pathname.replace(/\/+$/, "")}/v1/actions`;
   url.search = "";

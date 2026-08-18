@@ -45,7 +45,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): McpConfig {
     mode,
     transport,
     httpHost: env.CONTEXT_MCP_HTTP_HOST?.trim() || "127.0.0.1",
-    httpPort: positiveInteger(env.CONTEXT_MCP_HTTP_PORT, 8_789, "CONTEXT_MCP_HTTP_PORT"),
+    httpPort: positiveInteger(env.CONTEXT_MCP_HTTP_PORT, 17_003, "CONTEXT_MCP_HTTP_PORT"),
     httpPath,
     httpToken,
     timeoutMs: positiveInteger(env.CONTEXT_MCP_TIMEOUT_MS, 10_000, "CONTEXT_MCP_TIMEOUT_MS"),

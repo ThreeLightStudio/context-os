@@ -85,7 +85,7 @@ describe("Streamable HTTP MCP integration", () => {
       mode: "read",
       transport: "streamable-http",
       httpHost: "127.0.0.1",
-      httpPort: 8789,
+      httpPort: 17003,
       httpPath: "/mcp",
       httpToken: "mcp_test",
       timeoutMs: 1_000,
