@@ -140,10 +140,12 @@ public struct WhisperCppTranscriber: Sendable {
         let wavURL = temporaryDirectory.appendingPathComponent("context-voice-\(id).wav")
         let outputURL = temporaryDirectory.appendingPathComponent("context-voice-\(id)")
         let jsonURL = outputURL.appendingPathExtension("json")
+        let logURL = temporaryDirectory.appendingPathComponent("context-voice-\(id).log")
         defer {
             try? FileManager.default.removeItem(at: wavURL)
             try? FileManager.default.removeItem(at: jsonURL)
             try? FileManager.default.removeItem(at: outputURL.appendingPathExtension("txt"))
+            try? FileManager.default.removeItem(at: logURL)
         }
 
         try Self.writeWav(samples: samples, sampleRate: sampleRate, to: wavURL)
@@ -157,36 +159,31 @@ public struct WhisperCppTranscriber: Sendable {
             "-l", "auto",
             "-ng",
         ]
-        let errorPipe = Pipe()
-        let outputPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = outputPipe
+        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        let logHandle = try FileHandle(forWritingTo: logURL)
+        process.standardError = logHandle
+        process.standardOutput = logHandle
         do {
             try process.run()
         } catch {
+            try? logHandle.close()
             throw VoiceCaptureError.transcriptionFailed("Could not start whisper.cpp: \(error.localizedDescription)")
         }
         process.waitUntilExit()
+        try? logHandle.close()
+        let logOutput = String(data: (try? Data(contentsOf: logURL)) ?? Data(), encoding: .utf8)
+        let diagnostics = logOutput?
+            .split(whereSeparator: \.isNewline)
+            .filter { !$0.hasPrefix("load_backend:") && !$0.contains("tensor API disabled") }
+            .suffix(6)
+            .map(String.init)
+            .joined(separator: " ")
         guard process.terminationStatus == 0 else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let diagnostics = String(data: errorData, encoding: .utf8)?
-                .split(whereSeparator: \.isNewline)
-                .map(String.init)
-                .filter { !$0.hasPrefix("load_backend:") && !$0.contains("tensor API disabled") }
-                .suffix(4)
-                .joined(separator: " ")
             let message = diagnostics?.isEmpty == false ? diagnostics! : "whisper.cpp failed"
             throw VoiceCaptureError.transcriptionFailed("whisper.cpp exited with code \(process.terminationStatus): \(message)")
         }
         guard FileManager.default.fileExists(atPath: jsonURL.path) else {
-            let errorOutput = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let standardOutput = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let details = [errorOutput, standardOutput]
-                .compactMap { $0?.isEmpty == false ? $0 : nil }
-                .joined(separator: " ")
-            let suffix = details.isEmpty ? "" : " Output: \(details)"
+            let suffix = diagnostics?.isEmpty == false ? " Output: \(diagnostics!)" : ""
             throw VoiceCaptureError.transcriptionFailed("whisper.cpp did not produce JSON output at \(jsonURL.path).\(suffix)")
         }
         do {
