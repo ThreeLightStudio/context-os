@@ -1,4 +1,6 @@
 import type { RemoteCapture } from './contextCapture'
+import { createI18n } from './i18n'
+import type { Locale } from './i18n'
 
 export type ThoughtCopyRange = 'today' | 'week' | 'month' | 'custom' | 'all'
 
@@ -29,40 +31,38 @@ function parseCalendarDate(value: string, edge: 'start' | 'end') {
   return edge === 'start' ? startOfDay(date) : endOfDay(date)
 }
 
-function formatDate(value: Date) {
-  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long' }).format(value)
-}
-
 export function getThoughtCopyRange(
   range: ThoughtCopyRange,
   now = new Date(),
   customStart = '',
-  customEnd = ''
+  customEnd = '',
+  locale: Locale = 'ko'
 ): ThoughtDateRange | { error: string } {
-  if (range === 'all') return { label: '전체 기록' }
+  const { t, formatDate } = createI18n(locale)
+  if (range === 'all') return { label: t('thoughts.copyRangeAll') }
 
   if (range === 'custom') {
     const start = parseCalendarDate(customStart, 'start')
     const end = parseCalendarDate(customEnd, 'end')
-    if (!start || !end) return { error: '시작일과 종료일을 모두 선택해 주세요.' }
-    if (start > end) return { error: '종료일은 시작일보다 빠를 수 없습니다.' }
-    return { start, end, label: `${formatDate(start)}–${formatDate(end)} 기록` }
+    if (!start || !end) return { error: t('thoughts.copyDatesRequired') }
+    if (start > end) return { error: t('thoughts.copyDateOrder') }
+    return { start, end, label: t('thoughts.copyRangeCustom', { start: formatDate(start, { dateStyle: 'long' }), end: formatDate(end, { dateStyle: 'long' }) }) }
   }
 
   const today = startOfDay(now)
-  if (range === 'today') return { start: today, end: endOfDay(now), label: `${formatDate(now)} 기록` }
+  if (range === 'today') return { start: today, end: endOfDay(now), label: t('thoughts.copyRangeToday', { date: formatDate(now, { dateStyle: 'long' }) }) }
 
   if (range === 'week') {
     const weekStart = new Date(today)
     weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7))
     const weekEnd = new Date(weekStart)
     weekEnd.setDate(weekStart.getDate() + 6)
-    return { start: weekStart, end: endOfDay(weekEnd), label: `${formatDate(weekStart)}–${formatDate(weekEnd)} 기록` }
+    return { start: weekStart, end: endOfDay(weekEnd), label: t('thoughts.copyRangeWeek', { start: formatDate(weekStart, { dateStyle: 'long' }), end: formatDate(weekEnd, { dateStyle: 'long' }) }) }
   }
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  return { start: monthStart, end: endOfDay(monthEnd), label: `${now.getFullYear()}년 ${now.getMonth() + 1}월 기록` }
+  return { start: monthStart, end: endOfDay(monthEnd), label: t('thoughts.copyRangeMonth', { year: now.getFullYear(), month: now.getMonth() + 1 }) }
 }
 
 export function filterThoughtsForCopy(captures: RemoteCapture[], range: ThoughtDateRange) {
@@ -75,20 +75,20 @@ export function filterThoughtsForCopy(captures: RemoteCapture[], range: ThoughtD
     .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime())
 }
 
-export function formatThoughtsForClipboard(captures: RemoteCapture[], label: string) {
-  const heading = `Context Shelf 생각 기록\n범위: ${label}\n생각 ${captures.length}개`
-  if (captures.length === 0) return `${heading}\n\n이 기간에 기록한 생각이 없습니다.`
+export function formatThoughtsForClipboard(captures: RemoteCapture[], label: string, locale: Locale = 'ko') {
+  const { t, formatDate } = createI18n(locale)
+  const heading = [t('thoughts.clipboardTitle'), t('thoughts.clipboardRange', { label }), t('thoughts.clipboardCount', { count: captures.length })].join('\n')
+  if (captures.length === 0) return `${heading}\n\n${t('thoughts.clipboardEmpty')}`
 
-  const timestamp = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
   const entries = captures.map((capture) => {
     const browser = capture.data.context?.browser
-    const source = [browser?.title ? `출처: ${browser.title}` : '', browser?.url ? `URL: ${browser.url}` : ''].filter(Boolean)
-    return ['---', timestamp.format(new Date(capture.recordedAt)), capture.data.content, ...source].join('\n')
+    const source = [browser?.title ? t('thoughts.clipboardSource', { title: browser.title }) : '', browser?.url ? t('thoughts.clipboardUrl', { url: browser.url }) : ''].filter(Boolean)
+    return ['---', formatDate(new Date(capture.recordedAt), { dateStyle: 'medium', timeStyle: 'short' }), capture.data.content, ...source].join('\n')
   })
   return [heading, ...entries].join('\n\n')
 }
 
-export async function copyTextToClipboard(text: string) {
+export async function copyTextToClipboard(text: string, locale: Locale = 'ko') {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
     return
@@ -103,5 +103,5 @@ export async function copyTextToClipboard(text: string) {
   textarea.select()
   const copied = document.execCommand('copy')
   textarea.remove()
-  if (!copied) throw new Error('브라우저에서 클립보드에 접근할 수 없습니다.')
+  if (!copied) throw new Error(createI18n(locale).t('thoughts.clipboardError'))
 }
