@@ -5,6 +5,21 @@ origin to external clients. A gateway or reverse proxy owns path selection;
 the services do not merge and `server-context` does not execute MCP or Brain
 work.
 
+## As-Is → To-Be
+
+The comparison below describes the change introduced by issue #15. Local ports are shown only to explain the current development setup; they are not promoted to public API identifiers.
+
+| Area | As-Is | To-Be |
+| --- | --- | --- |
+| External access | Clients connect directly to the deployed `server-context` Worker or to local service ports. | An optional single public origin routes `/v1/*` to `server-context` and `/mcp` to `server-mcp`. |
+| `server-context` boundary | Cloudflare Worker + D1 owns the Context API and record data. | The same Worker + D1 boundary remains; `GET /v1/records/:id` and revision metadata are additive. |
+| MCP boundary | `server-mcp` runs locally over stdio or local HTTP and calls the Context API. | The same adapter can be reached through `/mcp`; it still never accesses D1 directly. |
+| Brain boundary | `server-brain` runs as a local Node service with a local LLM. | It remains local-first; `/brain/v1/*` is reserved and not publicly exposed initially. |
+| Writes | Context records are append-only captures. | `update_context` appends a new revision with lineage metadata; existing records remain unchanged. |
+| Deployment choice | No shared external entry-point contract exists. | A provider-neutral route contract exists; reverse proxy, Cloudflare gateway, Tunnel, and hosting choices remain follow-up decisions. |
+
+The To-Be model changes how clients may enter the system, not which service owns computation or data. `server-context` does not execute MCP or Brain work, and existing direct Worker clients remain compatible.
+
 ## Public path contract
 
 ```text
