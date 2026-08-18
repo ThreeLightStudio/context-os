@@ -166,3 +166,24 @@ test("prunes missing worktree registrations without deleting unmerged branches",
     removeRepository(repo, linkedPath);
   }
 });
+
+test("deletes branches merged into the selected base even when HEAD differs", () => {
+  const repo = createRepository();
+
+  try {
+    git(repo, ["checkout", "-b", "chore/current"]);
+    git(repo, ["checkout", "--quiet", "main"]);
+    git(repo, ["checkout", "-b", "chore/merged-elsewhere"]);
+    commitFile(repo, "merged-elsewhere.txt", "merged into main\n");
+    mergeBranch(repo, "chore/merged-elsewhere");
+    git(repo, ["checkout", "--quiet", "chore/current"]);
+
+    const result = runCleanup(repo, ["--base", "main", "--yes"]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(branchExists(repo, "chore/merged-elsewhere"), false);
+    assert.equal(git(repo, ["branch", "--show-current"]), "chore/current");
+  } finally {
+    removeRepository(repo, "");
+  }
+});

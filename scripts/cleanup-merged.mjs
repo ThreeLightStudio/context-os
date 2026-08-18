@@ -402,7 +402,7 @@ async function main() {
     }
 
     console.log(`Deleting local branch ${item.branch}...`);
-    runGit(["branch", "-d", "--", item.branch], { cwd: repoRoot });
+    runGit(["branch", "-D", "--", item.branch], { cwd: repoRoot });
   }
 
   console.log("Cleanup complete.");
