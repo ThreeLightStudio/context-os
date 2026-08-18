@@ -1,0 +1,48 @@
+name: Documentation
+description: Propose documentation, example, or developer-experience improvements.
+title: "[docs] "
+labels:
+  - "type:docs"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        After this issue is created, create the branch with:
+        `pnpm branch docs <issue-number> <short-kebab-slug>`
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What information is missing, unclear, or outdated?
+      placeholder: Describe who needs this documentation and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which pages, guides, examples, or comments should change?
+      placeholder: List the documentation areas and boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: What should readers be able to understand or do afterward?
+      placeholder: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification-plan
+    attributes:
+      label: Verification plan
+      description: How will the documentation be checked for accuracy and usability?
+      placeholder: Describe the verification steps.
+    validations:
+      required: true
