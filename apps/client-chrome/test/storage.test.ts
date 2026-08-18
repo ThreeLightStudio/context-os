@@ -15,7 +15,7 @@ function legacyData(endpointUrl: string): Omit<AppData, 'schemaVersion' | 'sync'
     license: { plan: 'free' },
     sync: {
       endpointUrl,
-      brainEndpointUrl: 'http://127.0.0.1:8788',
+      brainEndpointUrl: 'http://127.0.0.1:17002',
       outbox: [],
       developerMode: false
     }
@@ -43,7 +43,7 @@ describe('storage schema migration', () => {
   it('migrates v1 data to local setup without a server address', () => {
     const data = normalizeData(versionOneData())
     expect(data.sync).toMatchObject({ mode: 'local', setupComplete: false, endpointUrl: '' })
-    expect(data.sync.brainEndpointUrl).toBe('http://127.0.0.1:8788')
+    expect(data.sync.brainEndpointUrl).toBe('http://127.0.0.1:17002')
   })
 
   it('keeps a stored workers.dev endpoint and API token across repeated loads', async () => {
@@ -93,7 +93,7 @@ describe('storage schema migration', () => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('local Context Server detection', () => {
-  it.each(['http://localhost:8787', 'http://127.0.0.1:8787', 'http://[::1]:8787'])('recognizes %s', (url) => {
+  it.each(['http://localhost:17001', 'http://127.0.0.1:17001', 'http://[::1]:17001'])('recognizes %s', (url) => {
     expect(isLocalContextServerUrl(url)).toBe(true)
   })
 

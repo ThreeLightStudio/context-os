@@ -1,5 +1,7 @@
 # Context OS 설치 모드
 
+로컬 서비스 포트 정책은 [`local-ports.md`](local-ports.md)를 따릅니다.
+
 Context OS는 두 가지 방식으로 실행할 수 있습니다. 둘 다 기록의 소유권은 사용자에게 있으며, API token과 실제 설정 파일은 저장소에 커밋하지 않습니다.
 
 | 모드 | 적합한 경우 | 기록 위치 | Raycast 사용 |
@@ -43,11 +45,11 @@ pnpm token:create -- --local --name local --read --write
 pnpm dev
 ```
 
-`token:create`가 한 번만 보여 주는 `ctx_…` token을 비밀번호 관리자에 보관합니다. Worker는 기본적으로 `http://127.0.0.1:8787`에서 실행됩니다. 로컬 D1 데이터는 `apps/server-context/.wrangler` 아래에 보관됩니다.
+`token:create`가 한 번만 보여 주는 `ctx_…` token을 비밀번호 관리자에 보관합니다. Worker는 기본적으로 `http://127.0.0.1:17001`에서 실행됩니다. 로컬 D1 데이터는 `apps/server-context/.wrangler` 아래에 보관됩니다.
 
 ### 3) 클라이언트 연결
 
-- Chrome 확장 → **연결 설정** → **로컬** → `http://127.0.0.1:8787`와 방금 만든 token을 입력하고 **연결 확인**을 실행합니다.
+- Chrome 확장 → **연결 설정** → **로컬** → `http://127.0.0.1:17001`와 방금 만든 token을 입력하고 **연결 확인**을 실행합니다.
 - Raycast → **Context Settings** → **Edit Extension Preferences** → 같은 URL과 token을 입력합니다.
 
 Raycast 확장은 별도로 빌드·가져와야 합니다.

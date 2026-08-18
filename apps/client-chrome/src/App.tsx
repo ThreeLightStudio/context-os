@@ -658,7 +658,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
           <p className="help-text">{deploymentMode === 'local' ? t('settings.localHelp') : t('settings.cloudflareHelp')}</p>
           <label className="capture-field">
             <span>{deploymentMode === 'local' ? t('settings.localEndpoint') : t('settings.cloudflareEndpoint')}</span>
-            <input value={endpoint} onChange={(event) => { markSettingsDirty(); setEndpoint(event.target.value); setConnectionStatus('') }} placeholder={deploymentMode === 'local' ? 'http://127.0.0.1:8787' : 'https://context.example.com'} inputMode="url" />
+            <input value={endpoint} onChange={(event) => { markSettingsDirty(); setEndpoint(event.target.value); setConnectionStatus('') }} placeholder={deploymentMode === 'local' ? 'http://127.0.0.1:17001' : 'https://context.example.com'} inputMode="url" />
           </label>
           <label className="capture-field settings-token-field">
             <span>{t('settings.apiToken')}</span>
@@ -680,7 +680,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
           <div className="settings-section-heading"><p className="eyebrow">{t('settings.intelligenceEyebrow')}</p><h2>{t('settings.brainServer')}</h2></div>
           <label className="capture-field">
             <span>{t('settings.brainEndpoint')}</span>
-            <input value={brainEndpoint} onChange={(event) => { markBrainSettingsDirty(); setBrainEndpoint(event.target.value) }} placeholder="http://127.0.0.1:8788" inputMode="url" />
+            <input value={brainEndpoint} onChange={(event) => { markBrainSettingsDirty(); setBrainEndpoint(event.target.value) }} placeholder="http://127.0.0.1:17002" inputMode="url" />
           </label>
           <label className="capture-field settings-token-field">
             <span>{t('settings.brainApiToken')}</span>

@@ -101,9 +101,9 @@ describe('checkContextServerConnection', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ records: [], nextCursor: null }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(checkContextServerConnection({ endpointUrl: 'http://127.0.0.1:8787/', apiToken: 'test-token' })).resolves.toEqual({ ok: true })
+    await expect(checkContextServerConnection({ endpointUrl: 'http://127.0.0.1:17001/', apiToken: 'test-token' })).resolves.toEqual({ ok: true })
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8787/v1/records?limit=1',
+      'http://127.0.0.1:17001/v1/records?limit=1',
       expect.objectContaining({ headers: expect.any(Headers) })
     )
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit

@@ -50,7 +50,7 @@ For local Chrome extension testing, create a `.dev.vars` file with an exact orig
 ### Create a capture
 
 ```sh
-curl -X POST http://localhost:8787/v1/records \
+curl -X POST http://localhost:17001/v1/records \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer ctx_<token>' \
   --data '{
@@ -134,7 +134,7 @@ Then import into a running Worker. Set `CONTEXT_SERVER_TOKEN` in the process env
 
 ```sh
 export CONTEXT_SERVER_TOKEN='store-the-token-outside-shell-history-when-possible'
-pnpm import:context-export -- --file /path/to/context-export.md --url http://127.0.0.1:8787
+pnpm import:context-export -- --file /path/to/context-export.md --url http://127.0.0.1:17001
 ```
 
 The import stops before writing anything if any capture exceeds the current 32KB content limit. Use `--timezone +09:00` to override the default timestamp offset when needed.

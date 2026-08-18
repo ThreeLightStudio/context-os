@@ -29,7 +29,7 @@ pnpm --filter server-brain build
 pnpm --filter server-brain start
 ```
 
-The server listens on `127.0.0.1:8788` by default. `BRAIN_API_TOKEN` is
+The server listens on `127.0.0.1:17002` by default. `BRAIN_API_TOKEN` is
 optional for a local process. When it is set, every API request requires the
 matching Bearer token. Browser origins must be listed exactly in
 `BRAIN_ALLOWED_ORIGINS`.
@@ -39,13 +39,13 @@ matching Bearer token. Browser origins must be listed exactly in
 List available Actions:
 
 ```sh
-curl http://127.0.0.1:8788/v1/actions
+curl http://127.0.0.1:17002/v1/actions
 ```
 
 Run `summarize`:
 
 ```sh
-curl -X POST http://127.0.0.1:8788/v1/actions \
+curl -X POST http://127.0.0.1:17002/v1/actions \
   -H 'content-type: application/json' \
   --data '{"action":"summarize","input":{"content":"Context OS를 설계한다."}}'
 ```
@@ -56,7 +56,7 @@ completed task. The task can also be read with `GET /v1/tasks/:id`.
 Run `daily-summary` for a local calendar date:
 
 ```sh
-curl -X POST http://127.0.0.1:8788/v1/actions \
+curl -X POST http://127.0.0.1:17002/v1/actions \
   -H 'content-type: application/json' \
   --data '{"action":"daily-summary","input":{"date":"2026-08-13","timezone":"Asia/Seoul"}}'
 ```

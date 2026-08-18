@@ -1,5 +1,5 @@
 export const DEFAULT_BRAIN_HOST = "127.0.0.1";
-export const DEFAULT_BRAIN_PORT = 8788;
+export const DEFAULT_BRAIN_PORT = 17002;
 export const DEFAULT_BRAIN_BASE_URL = "http://127.0.0.1:11434/v1";
 export const DEFAULT_BRAIN_MODEL = "local-model";
 

@@ -5,7 +5,7 @@ import { ModelProviderError, type ModelProvider } from "../src/providers/model-p
 
 const config: BrainConfig = {
   host: "127.0.0.1",
-  port: 8788,
+  port: 17002,
   provider: "local",
   baseUrl: "http://127.0.0.1:11434/v1",
   model: "test-model",
@@ -24,7 +24,7 @@ function provider(output: unknown): ModelProvider {
 }
 
 function request(path: string, init: RequestInit = {}) {
-  return new Request(`http://127.0.0.1:8788${path}`, init);
+  return new Request(`http://127.0.0.1:17002${path}`, init);
 }
 
 describe("server-brain HTTP app", () => {
