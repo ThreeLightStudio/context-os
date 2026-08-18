@@ -440,33 +440,42 @@ public final class VoiceService: @unchecked Sendable {
 
     private func poll(jobId: String?) -> VoiceResponse {
         guard let jobId else { return response(ok: false, error: "jobId is required.") }
-        stateLock.lock(); defer { stateLock.unlock() }
-        if let result = jobs[jobId] {
+        stateLock.lock()
+        let result = jobs[jobId]
+        let isActive = activeJob == jobId
+        stateLock.unlock()
+        if let result {
             switch result {
             case .success: return response(ok: true, jobId: jobId)
             case .failure(let error): return response(ok: false, jobId: jobId, error: error.localizedDescription)
             }
         }
-        if activeJob == jobId { return response(ok: true, jobId: jobId) }
+        if isActive { return response(ok: true, jobId: jobId) }
         return response(ok: false, jobId: jobId, error: VoiceCaptureError.jobNotFound.localizedDescription)
     }
 
     private func consume(jobId: String?) -> VoiceResponse {
         guard let jobId else { return response(ok: false, error: "jobId is required.") }
-        stateLock.lock(); defer { stateLock.unlock() }
+        stateLock.lock()
         guard let result = jobs[jobId] else {
+            stateLock.unlock()
             return response(ok: false, jobId: jobId, error: VoiceCaptureError.jobNotReady.localizedDescription)
         }
         switch result {
         case .success(let transcript):
-            buffer.clear()
             activeJob = jobId
             state = "stopped"
-            return response(ok: true, jobId: jobId, transcript: transcript)
         case .failure(let error):
             jobs.removeValue(forKey: jobId)
             activeJob = nil
             state = "error"
+        }
+        stateLock.unlock()
+        switch result {
+        case .success(let transcript):
+            buffer.clear()
+            return response(ok: true, jobId: jobId, transcript: transcript)
+        case .failure(let error):
             return response(ok: false, jobId: jobId, error: error.localizedDescription)
         }
     }
