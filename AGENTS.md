@@ -38,24 +38,46 @@ you to do so.
 4. If GitHub authentication or an Issue-management integration is unavailable,
    do not claim that an Issue was created or updated. Report the limitation.
 
-## Issue templates and labels
+## Issue templates and native Issue Types
 
 Use the type-specific Issue template when opening tracked work. Each template
 sets the title prefix (`[feat]`, `[fix]`, `[refactor]`, `[docs]`, or `[chore]`)
-and the matching label (`type:feat`, `type:fix`, `type:refactor`, `type:docs`,
-or `type:chore`). Keep the Issue label and the branch type aligned. Set
+and the native GitHub Issue Type used by this repository:
+
+- `feat` → `Feature`
+- `fix` → `Bug`
+- `refactor`, `docs`, `chore` → `Task`
+
+The mapping is intentionally many-to-one because the organization currently
+enables only `Feature`, `Bug`, and `Task`. The branch and PR prefix remains the
+more specific work classification. Do not use `type:*` labels for
+classification; they are not required on Issues or pull requests.
+Keep `area:*` and `priority:*` labels available for orthogonal dimensions. Set
 priority through the repository's configured Project field.
+
+## Issue Fields
+
+When creating tracked work, add the Issue to the repository's configured
+Project and set its `Priority` Field before implementation starts. Keep the
+Project's `Status` Field aligned with the work lifecycle: use the configured
+in-progress value when work starts and the configured completed value after
+the work is merged. Native Issue Type and Project Fields are authoritative;
+do not invent labels or values when a Project or Field is unavailable. See
+[`docs/issue-field-guidance.md`](docs/issue-field-guidance.md).
 
 ## Branches and pull requests
 
-### Pull request labels
+### Pull request metadata
 
-Apply exactly one PR label matching the source branch type: `type:<type>`.
-For example, a `feat/...` branch requires the `type:feat` PR label. The
-`branch-name` workflow verifies this label.
+The source branch and PR title keep the specific work prefix, while the linked
+Issue's native Type is canonical. For example, `feat/...` and `[feat] ...`
+require the linked Issue Type `Feature`; `refactor/...` and `[refactor] ...`
+require `Task`. The `branch-name` workflow verifies this mapping and does not
+require a duplicate `type:*` label on the Issue or PR.
 
 For tracked work, create a focused branch named
-`<type>/<issue-number>-<short-kebab-slug>` and keep the change scoped to its Issue.
+`<type>/<issue-number>-<short-kebab-slug>` and keep the change scoped to its
+Issue.
 
 Allowed types are `feat`, `fix`, `refactor`, `docs`, and `chore`. Use the
 repository CLI so the branch is valid before work begins:
@@ -70,9 +92,9 @@ other paths are allowed, but the pull request branch-name check will prevent
 them from merging until the name is corrected.
 
 The issue number in the branch is the Issue that the work belongs to. In the
-pull request template, replace the placeholder with `Fixes #<issue-number>` (or
-an equivalent GitHub closing keyword). The `branch-name` workflow checks the
-branch format, the closing reference, and the matching `type:<type>` label.
+pull request template, replace the placeholder with `Fixes #<issue-number>`
+(or an equivalent GitHub closing keyword). The `branch-name` workflow checks
+the branch format, the closing reference, and the matching native Issue Type.
 GitHub closes the Issue automatically when the pull request is merged into the
 default branch.
 
@@ -85,7 +107,8 @@ Open or update a pull request with:
 - `Fixes #<issue-number>` or another explicit Issue reference;
 - a concise summary of the change;
 - verification commands and their results;
-- affected clients, servers, packages, and user-visible behavior; and
+- affected clients, servers, packages, and user-visible behavior;
+- the linked Issue's native Type matching the source branch mapping; and
 - screenshots or recordings when UI behavior changed, without private data.
 
 Run the relevant package checks and the repository verification command before

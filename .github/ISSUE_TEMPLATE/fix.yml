@@ -1,14 +1,14 @@
 name: Bug fix
 description: Report a reproducible defect or incorrect behavior.
 title: "[fix] "
-labels:
-  - "type:fix"
+type: bug
 body:
   - type: markdown
     attributes:
       value: |
-        After this issue is created, create the branch with:
+        This template assigns the native GitHub Issue Type `Bug`. After this issue is created, create the branch with:
         `pnpm branch fix <issue-number> <short-kebab-slug>`
+        Before implementation, add the issue to the configured Project and set its `Priority` Field.
 
   - type: textarea
     id: motivation
