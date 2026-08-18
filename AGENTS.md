@@ -51,7 +51,7 @@ and the native GitHub Issue Type used by this repository:
 The mapping is intentionally many-to-one because the organization currently
 enables only `Feature`, `Bug`, and `Task`. The branch and PR prefix remains the
 more specific work classification. Do not use `type:*` labels for
-classification; they are legacy metadata retained only for the transition.
+classification; they are not required on Issues or pull requests.
 Keep `area:*` and `priority:*` labels available for orthogonal dimensions. Set
 priority through the repository's configured Project field.
 

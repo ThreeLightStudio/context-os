@@ -29,7 +29,6 @@ Commands and results:
 - [ ] `Fixes #<issue-number>` references the source branch's Issue
 - [ ] The linked Issue uses the native Type mapped from the source branch type
 - [ ] The Issue is in the configured Project with its `Priority` Field set
-- [ ] No duplicate `type:*` label is needed for classification
 
 ## Screenshots or recordings
 

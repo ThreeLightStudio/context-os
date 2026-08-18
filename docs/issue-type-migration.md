@@ -14,22 +14,19 @@ intent, and map to the native Types enabled by the organization:
 
 The `type:*` labels are legacy classification metadata. They are not added by
 new Issue templates and are not required on Issues or pull requests. Existing
-labels should be migrated in place rather than used as a second source of
-truth.
+Issues have been migrated to native Types and their classification labels
+removed; branch prefixes and PR titles retain the more specific work
+classification.
 
 ## Transition steps
 
-1. For each open Issue, set the native Issue Type from the mapping above. Keep
-   its existing `type:*` label temporarily so the migration is reversible.
-2. For each open pull request, confirm its linked Issue has the expected native
-   Type and keep the branch prefix and PR title unchanged.
-3. Remove the matching `type:*` label from migrated Issues and pull requests.
-4. Audit for remaining `type:*` labels. After no active work depends on them,
-   retire the labels from repository settings; historical closed Issues may
-   retain labels for search compatibility.
-
-Until migration is complete, old Issues may still show a legacy label. New
-work must use the Issue templates so the native Type is assigned at creation.
+1. For new Issues, use the type-specific template so the native Type is
+   assigned at creation.
+2. For each pull request, confirm its linked Issue uses the native Type
+   expected from the branch prefix; keep the branch prefix and PR title
+   unchanged.
+3. Audit any remaining historical `type:*` labels and retire them from
+   active work. They are not a source of truth for classification.
 The branch-name workflow rejects a pull request when the linked Issue Type is
 missing or does not match the source branch mapping.
 
