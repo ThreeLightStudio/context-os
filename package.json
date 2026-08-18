@@ -16,6 +16,7 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
+    "branch": "node scripts/new-branch.mjs",
     "lint": "turbo run lint",
     "verify": "turbo run lint typecheck test build",
     "dev:chrome": "pnpm --filter context-shelf dev",
