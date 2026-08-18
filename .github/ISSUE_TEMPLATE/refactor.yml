@@ -1,0 +1,49 @@
+name: Refactor
+description: Propose an internal code or architecture improvement without changing intended behavior.
+title: "[refactor] "
+labels:
+  - "type:refactor"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        After this issue is created, create the branch with:
+        `pnpm branch refactor <issue-number> <short-kebab-slug>`
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What maintainability, reliability, or performance problem does this address?
+      placeholder: Describe why the refactor is needed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which code or architecture areas will change?
+      placeholder: List the expected changes and boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: What must be true when the refactor is complete?
+      placeholder: |
+        - [ ] Existing behavior is preserved
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification-plan
+    attributes:
+      label: Verification plan
+      description: Which tests, checks, or measurements should be run?
+      placeholder: Describe the verification steps.
+    validations:
+      required: true

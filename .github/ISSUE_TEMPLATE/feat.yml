@@ -1,0 +1,48 @@
+name: Feature
+description: Propose a user-facing feature or capability.
+title: "[feat] "
+labels:
+  - "type:feat"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        After this issue is created, create the branch with:
+        `pnpm branch feat <issue-number> <short-kebab-slug>`
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem should this feature solve, and for whom?
+      placeholder: Describe the user or workflow that needs this.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What should be included, and what is explicitly out of scope?
+      placeholder: List the expected behavior and boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: How will we know this feature is complete?
+      placeholder: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification-plan
+    attributes:
+      label: Verification plan
+      description: Which tests, checks, or manual verification should be run?
+      placeholder: Describe the verification steps.
+    validations:
+      required: true
