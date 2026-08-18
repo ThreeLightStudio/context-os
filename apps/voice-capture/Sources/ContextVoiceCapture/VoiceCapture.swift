@@ -256,6 +256,7 @@ public struct VoiceRequest: Codable, Sendable {
 }
 
 public struct VoiceResponse: Codable, Sendable {
+    public let protocolVersion: Int
     public let ok: Bool
     public let state: String
     public let bufferedSeconds: Double
@@ -263,7 +264,8 @@ public struct VoiceResponse: Codable, Sendable {
     public let transcript: VoiceTranscript?
     public let error: String?
 
-    public init(ok: Bool, state: String, bufferedSeconds: Double, jobId: String? = nil, transcript: VoiceTranscript? = nil, error: String? = nil) {
+    public init(ok: Bool, state: String, bufferedSeconds: Double, jobId: String? = nil, transcript: VoiceTranscript? = nil, error: String? = nil, protocolVersion: Int = 2) {
+        self.protocolVersion = protocolVersion
         self.ok = ok
         self.state = state
         self.bufferedSeconds = bufferedSeconds

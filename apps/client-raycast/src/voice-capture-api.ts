@@ -5,6 +5,8 @@ import { createConnection } from "node:net";
 import { join } from "node:path";
 import { getVoicePreferences } from "./voice-brain-api";
 
+const VOICE_HELPER_PROTOCOL_VERSION = 2;
+
 export interface VoiceTranscriptSegment {
   startMs: number;
   endMs: number;
@@ -17,6 +19,7 @@ export interface VoiceTranscript {
 }
 
 interface VoiceResponse {
+  protocolVersion?: number;
   ok: boolean;
   state: string;
   bufferedSeconds: number;
@@ -67,7 +70,7 @@ async function waitForHelper(): Promise<void> {
   while (Date.now() < deadline) {
     try {
       const result = await request("status", undefined, 500);
-      if (result.ok) return;
+      if (result.ok && result.protocolVersion === VOICE_HELPER_PROTOCOL_VERSION) return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -78,8 +81,8 @@ async function waitForHelper(): Promise<void> {
 export async function ensureVoiceHelper(): Promise<void> {
   if (process.platform !== "darwin") throw new Error("Voice Capture is currently supported on macOS only.");
   try {
-    await request("status", undefined, 500);
-    return;
+    const result = await request("status", undefined, 500);
+    if (result.ok && result.protocolVersion === VOICE_HELPER_PROTOCOL_VERSION) return;
   } catch {
     const configured = getVoicePreferences();
     const cliPath = configured.whisperCliPath?.trim();
