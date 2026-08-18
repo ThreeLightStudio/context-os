@@ -3,6 +3,7 @@
 # dependencies
 /node_modules
 /dist
+/assets/context-voice-capture*
 
 # Raycast specific files
 raycast-env.d.ts

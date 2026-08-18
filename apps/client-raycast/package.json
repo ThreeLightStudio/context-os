@@ -42,6 +42,46 @@
       "subtitle": "View Server Connection Settings",
       "description": "View and verify the local or Cloudflare Context Server connection.",
       "mode": "view"
+    },
+    {
+      "name": "start-voice-capture",
+      "title": "Start Voice Capture",
+      "subtitle": "Start Local Rolling Buffer",
+      "description": "Start the local microphone rolling buffer.",
+      "mode": "view",
+      "platforms": [
+        "macOS"
+      ]
+    },
+    {
+      "name": "stop-voice-capture",
+      "title": "Stop Voice Capture",
+      "subtitle": "Stop Microphone, Keep Buffer",
+      "description": "Stop microphone input while retaining the local buffer.",
+      "mode": "view",
+      "platforms": [
+        "macOS"
+      ]
+    },
+    {
+      "name": "capture-recent-voice",
+      "title": "Capture Recent Voice",
+      "subtitle": "Create Context Draft",
+      "description": "Transcribe the recent local voice buffer and review a Context Draft.",
+      "mode": "view",
+      "platforms": [
+        "macOS"
+      ]
+    },
+    {
+      "name": "clear-voice-buffer",
+      "title": "Clear Voice Buffer",
+      "subtitle": "Delete Local Audio",
+      "description": "Immediately delete local audio and pending transcription.",
+      "mode": "view",
+      "platforms": [
+        "macOS"
+      ]
     }
   ],
   "preferences": [
@@ -60,6 +100,38 @@
       "type": "password",
       "required": true,
       "placeholder": "Read/write API token"
+    },
+    {
+      "name": "brainUrl",
+      "title": "Brain Server URL",
+      "description": "Defaults to the local server-brain. Only the transcript, never audio, is sent here.",
+      "type": "textfield",
+      "required": false,
+      "default": "http://127.0.0.1:8788",
+      "placeholder": "http://127.0.0.1:8788"
+    },
+    {
+      "name": "brainApiToken",
+      "title": "Brain Server API Token",
+      "description": "Optional secret token when server-brain authentication is enabled.",
+      "type": "password",
+      "required": false
+    },
+    {
+      "name": "whisperCliPath",
+      "title": "Whisper CLI Path",
+      "description": "Absolute path to the local whisper.cpp whisper-cli executable.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/opt/homebrew/bin/whisper-cli"
+    },
+    {
+      "name": "whisperModelPath",
+      "title": "Whisper Model Path",
+      "description": "Absolute path to a multilingual whisper.cpp GGML model.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/Models/ggml-large-v3-turbo.bin"
     },
     {
       "name": "language",
@@ -96,13 +168,13 @@
     "typescript": "^5.8.2"
   },
   "scripts": {
-    "build": "ray build --environment dist --output dist",
+    "build": "node scripts/build-voice-helper.mjs && ray build --environment dist --output dist",
     "dev": "ray develop",
     "fix-lint": "eslint src test --fix && prettier --write src test package.json .prettierrc",
     "lint": "eslint src test && prettier --check src test package.json .prettierrc",
     "lint:store": "ray lint",
     "test": "node --test --experimental-strip-types test/*.test.ts",
-    "prepublishOnly": "echo \"\\n\\nIt seems like you are trying to publish the Raycast extension to npm.\\n\\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\\n\\n\" && exit 1",
+    "prepublishOnly": "<<ccr:2428302ec55d,string,299B>>",
     "publish": "npx @raycast/api@latest publish"
   }
 }

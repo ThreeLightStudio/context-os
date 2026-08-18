@@ -138,7 +138,7 @@ async function listAllRecords() {
   return records;
 }
 
-export async function saveCapture(id: string, content: string, capturedAt: string) {
+export async function saveCapture(id: string, content: string, capturedAt: string, inputMethod = "capture") {
   const { url, apiToken } = recordsConfig();
   const response = await recordsFetch(
     url.toString(),
@@ -152,7 +152,7 @@ export async function saveCapture(id: string, content: string, capturedAt: strin
         data: {
           kind: "capture",
           content,
-          source: { client: "raycast", inputMethod: "capture" },
+          source: { client: "raycast", inputMethod },
         },
       }),
     }),

@@ -1,0 +1,10 @@
+{
+  "name": "voice-capture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local macOS rolling voice capture helper for Context OS.",
+  "scripts": {
+    "build": "node scripts/run-swift-package.mjs build -c release",
+    "test": "node scripts/run-swift-package.mjs test"
+  }
+}
