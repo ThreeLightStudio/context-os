@@ -27,7 +27,7 @@ read Chrome extension-local storage directly. See
 
 ## Voice Capture
 
-On macOS, configure **Brain Server URL**, **Whisper CLI Path**, and **Whisper Model Path** in Extension Preferences. The default Brain Server is local at `http://127.0.0.1:8788`. Voice Capture sends transcript text to server-brain; it never uploads audio. The four Voice Capture commands use a 15-minute in-memory rolling buffer and always show an editable Draft before saving to Context Server.
+On macOS, configure **Brain Server URL**, **Whisper CLI Path**, and **Whisper Model Path** in Extension Preferences. The default Brain Server is local at `http://127.0.0.1:8788`. Voice Capture sends transcript text to server-brain; it never uploads audio. The four Voice Capture commands use a 15-minute in-memory rolling buffer and always show an editable Draft before saving to Context Server. The build packages the helper as a `Context Voice Capture.app` bundle with a microphone usage description. On first use, allow `Context Voice Capture` under macOS **System Settings → Privacy & Security → Microphone**.
 
 ## Raycast Store preflight
 

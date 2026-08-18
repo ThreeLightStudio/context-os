@@ -29,7 +29,7 @@ function socketPath() {
 }
 
 function helperPath() {
-  return join(environment.assetsPath, "context-voice-capture");
+  return join(environment.assetsPath, "context-voice-capture.app", "Contents", "MacOS", "context-voice-capture");
 }
 
 function request(command: string, jobId?: string): Promise<VoiceResponse> {
