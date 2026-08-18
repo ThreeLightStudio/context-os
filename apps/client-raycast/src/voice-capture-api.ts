@@ -95,7 +95,7 @@ export async function ensureVoiceHelper(): Promise<void> {
     let exitSignal: NodeJS.Signals | null = null;
     const child = spawn(
       "/usr/bin/open",
-      [helperBundlePath(), "--args", "--socket", socketPath(), "--whisper-cli", cliPath, "--model", modelPath],
+      ["-n", helperBundlePath(), "--args", "--socket", socketPath(), "--whisper-cli", cliPath, "--model", modelPath],
       {
         detached: true,
         stdio: "ignore",
