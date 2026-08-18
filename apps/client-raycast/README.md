@@ -25,6 +25,10 @@ Raycast requires a local Worker/D1 or deployed Cloudflare Worker; it cannot
 read Chrome extension-local storage directly. See
 [`docs/setup-modes.md`](../../docs/setup-modes.md) for both setup paths.
 
+## Voice Capture
+
+On macOS, configure **Brain Server URL**, **Whisper CLI Path**, and **Whisper Model Path** in Extension Preferences. The default Brain Server is local at `http://127.0.0.1:8788`. Voice Capture sends transcript text to server-brain; it never uploads audio. The four Voice Capture commands use a 15-minute in-memory rolling buffer and always show an editable Draft before saving to Context Server.
+
 ## Raycast Store preflight
 
 The manifest identifies the extension as `ThreeLightStudio`. Local builds,

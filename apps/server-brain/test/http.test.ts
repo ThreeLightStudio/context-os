@@ -34,7 +34,7 @@ describe("server-brain HTTP app", () => {
     const actions = await app.fetch(request("/v1/actions", { headers: { Authorization: "Bearer brain-test-token" } }));
     expect(actions.status).toBe(200);
     const actionBody = await actions.json() as { actions: Array<{ name: string }> };
-    expect(actionBody.actions.map(({ name }) => name)).toEqual(["summarize", "daily-summary"]);
+    expect(actionBody.actions.map(({ name }) => name)).toEqual(["summarize", "daily-summary", "voice-context-draft"]);
 
     const response = await app.fetch(request("/v1/actions", {
       method: "POST",

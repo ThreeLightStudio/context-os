@@ -1,0 +1,10 @@
+{
+  "name": "voice-capture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local macOS rolling voice capture helper for Context OS.",
+  "scripts": {
+    "build": "swift build -c release",
+    "test": "swift test"
+  }
+}
