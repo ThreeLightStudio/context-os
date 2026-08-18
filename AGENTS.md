@@ -27,6 +27,18 @@ or commit and perform the work there, leaving unrelated user changes untouched.
 Do not copy, move, stash, or discard those changes unless the user explicitly asks
 you to do so.
 
+## Canonical checkout and worktrees
+
+Keep the primary checkout on a clean, synchronized `main` branch. Before starting an Issue, update it with:
+
+```sh
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+```
+
+Use `pnpm branch <type> <issue-number> <short-kebab-slug>` to create the task branch in `.worktrees/<issue-number>-<short-kebab-slug>` from `origin/main`. The command leaves the canonical checkout and its current branch unchanged. Perform implementation and verification from the new worktree.
+
 ## Issue lifecycle
 
 1. Search existing open and recently closed Issues before creating a new one.
@@ -87,7 +99,7 @@ repository CLI so the branch is valid before work begins:
 pnpm branch feat 123 add-sso
 ```
 
-This creates `feat/123-add-sso` from the current branch. Do not use a
+This creates `feat/123-add-sso` in `.worktrees/123-add-sso` from `origin/main` without switching the canonical checkout. Do not use a
 product-specific prefix such as `codex/` or `copilot/`. Branches created by
 other paths are allowed, but the pull request branch-name check will prevent
 them from merging until the name is corrected.
