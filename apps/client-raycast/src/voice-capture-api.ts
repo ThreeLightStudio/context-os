@@ -1,4 +1,5 @@
 import { environment } from "@raycast/api";
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
 import { join } from "node:path";
@@ -25,7 +26,8 @@ interface VoiceResponse {
 }
 
 function socketPath() {
-  return join(environment.supportPath, "voice-capture.sock");
+  const userId = typeof process.getuid === "function" ? process.getuid() : "user";
+  return join("/tmp", `context-os-voice-${userId}.sock`);
 }
 
 function helperPath() {
@@ -81,12 +83,39 @@ export async function ensureVoiceHelper(): Promise<void> {
     const modelPath = configured.whisperModelPath?.trim();
     if (!cliPath || !modelPath)
       throw new Error("Set Whisper CLI Path and Whisper Model Path in Raycast Extension Preferences.");
-    const child = spawn(helperPath(), ["--socket", socketPath(), "--whisper-cli", cliPath, "--model", modelPath], {
+    const executablePath = helperPath();
+    if (!existsSync(executablePath)) {
+      throw new Error(`Voice helper asset is missing: ${executablePath}`);
+    }
+    let spawnErrorMessage: string | null = null;
+    let exitCode: number | null = null;
+    let exitSignal: NodeJS.Signals | null = null;
+    const child = spawn(executablePath, ["--socket", socketPath(), "--whisper-cli", cliPath, "--model", modelPath], {
       detached: true,
       stdio: "ignore",
     });
+    child.once("error", (error) => {
+      spawnErrorMessage = error instanceof Error ? error.message : String(error);
+    });
+    child.once("exit", (code, signal) => {
+      exitCode = code;
+      exitSignal = signal;
+    });
     child.unref();
-    await waitForHelper();
+    try {
+      await waitForHelper();
+    } catch (error) {
+      const details = [
+        spawnErrorMessage ? `spawn=${spawnErrorMessage}` : null,
+        exitCode !== null ? `exit=${exitCode}` : null,
+        exitSignal ? `signal=${exitSignal}` : null,
+        `helper=${executablePath}`,
+        `socket=${socketPath()}`,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      throw new Error(`${error instanceof Error ? error.message : "Voice helper did not start."} ${details}`);
+    }
   }
 }
 
