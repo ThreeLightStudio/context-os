@@ -60,6 +60,27 @@
       "type": "password",
       "required": true,
       "placeholder": "Read/write API token"
+    },
+    {
+      "name": "language",
+      "title": "Language",
+      "description": "Choose the language for Context OS command screens and messages.",
+      "type": "dropdown",
+      "default": "auto",
+      "data": [
+        {
+          "title": "Auto (Raycast language)",
+          "value": "auto"
+        },
+        {
+          "title": "한국어",
+          "value": "ko"
+        },
+        {
+          "title": "English",
+          "value": "en"
+        }
+      ]
     }
   ],
   "dependencies": {
