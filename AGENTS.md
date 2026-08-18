@@ -18,6 +18,15 @@ An Issue is optional for a typo, documentation-only change, formatting-only
 change, or a small, isolated and unambiguous bug fix. When the scope or impact
 is unclear, treat the work as tracked work and create an Issue.
 
+## Local worktree isolation
+
+Before modifying files, inspect the current working tree and existing worktrees.
+If the checkout contains uncommitted changes or another local task is in progress,
+do not work in that checkout. Create a dedicated worktree from the relevant branch
+or commit and perform the work there, leaving unrelated user changes untouched.
+Do not copy, move, stash, or discard those changes unless the user explicitly asks
+you to do so.
+
 ## Issue lifecycle
 
 1. Search existing open and recently closed Issues before creating a new one.

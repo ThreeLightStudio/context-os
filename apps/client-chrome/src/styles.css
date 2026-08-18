@@ -25,11 +25,12 @@ button { cursor: pointer; }
 .related-thought p { display: -webkit-box; overflow: hidden; margin: 7px 0; color: #e7e9ec; font-size: 13px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .related-thought small { color: #aeb0b2; font-weight: 500; }
 .capture-field { display: grid; gap: 9px; }
-.capture-field textarea, .capture-field input { width: 100%; border: 1.5px solid #d9dbdd; border-radius: 15px; outline: none; background: #202122; color: #f2f2f2; font-size: 18px; line-height: 1.45; }
+.capture-field textarea, .capture-field input, .capture-field select { width: 100%; border: 1.5px solid #d9dbdd; border-radius: 15px; outline: none; background: #202122; color: #f2f2f2; font-size: 18px; line-height: 1.45; }
 .capture-field textarea { min-height: 138px; padding: 16px; resize: vertical; }
-.capture-field input { padding: 13px 14px; font-size: 15px; }
+.capture-field input, .capture-field select { padding: 13px 14px; font-size: 15px; }
+.capture-field select { cursor: pointer; }
 .capture-field textarea::placeholder, .capture-field input::placeholder { color: #777a7c; }
-.capture-field textarea:focus, .capture-field input:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.11); }
+.capture-field textarea:focus, .capture-field input:focus, .capture-field select:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.11); }
 .primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 45px; margin-top: 16px; border-radius: 10px; font-weight: 750; }
 .primary-button { border: 1px solid #f3f3f3; background: #f3f3f3; color: #171819; }
 .primary-button:disabled { cursor: not-allowed; opacity: .45; }

@@ -3,6 +3,7 @@ import {
   ActionPanel,
   Clipboard,
   Form,
+  getPreferenceValues,
   Icon,
   Keyboard,
   List,
@@ -12,7 +13,7 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { randomUUID } from "node:crypto";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   activateResumeWork,
   createResumeWork,
@@ -23,6 +24,9 @@ import {
 } from "./context-events";
 import { domainsFor, formatContextCapture, urlsIn, CaptureMetadataV1 } from "./capture-metadata";
 import { saveCapture } from "./database";
+import { getI18n, RaycastLocalePreferences } from "./i18n";
+
+type I18n = ReturnType<typeof getI18n>;
 
 type ViewMode = "capture" | "resume";
 
@@ -44,18 +48,18 @@ const importClipboardShortcut: Keyboard.Shortcut = {
 };
 const importClipboardShortcutLabel = process.platform === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V";
 
-function WorkForm({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
+function WorkForm({ onCreate, i18n }: { onCreate: (name: string) => Promise<void>; i18n: I18n }) {
   const { pop } = useNavigation();
   return (
     <Form
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title="Work 시작"
+            title={i18n.t("capture.workStart")}
             onSubmit={async ({ name }: { name: string }) => {
               const trimmedName = name.trim();
               if (!trimmedName) {
-                await showToast({ style: Toast.Style.Failure, title: "Work 이름을 입력하세요" });
+                await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.workNameRequired") });
                 return;
               }
               await onCreate(trimmedName);
@@ -65,7 +69,12 @@ function WorkForm({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
         </ActionPanel>
       }
     >
-      <Form.TextField id="name" title="Work 이름" placeholder="예: Context OS QA 하기" autoFocus />
+      <Form.TextField
+        id="name"
+        title={i18n.t("capture.workName")}
+        placeholder={i18n.t("capture.workNamePlaceholder")}
+        autoFocus
+      />
     </Form>
   );
 }
@@ -74,14 +83,16 @@ function WorkPicker({
   works,
   activeWork,
   onSelect,
+  i18n,
 }: {
   works: ResumeWork[];
   activeWork: ResumeWork | null;
   onSelect: (work: ResumeWork) => Promise<void>;
+  i18n: I18n;
 }) {
   const { pop } = useNavigation();
   return (
-    <List searchBarPlaceholder="현재 Work 선택">
+    <List searchBarPlaceholder={i18n.t("capture.selectWork")}>
       {works.map((work) => (
         <List.Item
           key={work.id}
@@ -90,7 +101,7 @@ function WorkPicker({
           actions={
             <ActionPanel>
               <Action
-                title="현재 Work로 설정"
+                title={i18n.t("capture.setCurrentWork")}
                 onAction={async () => {
                   await onSelect(work);
                   pop();
@@ -111,6 +122,7 @@ function ResumeView({
   onCaptureMode,
   onCreateWork,
   onSelectWork,
+  i18n,
 }: {
   state: ResumeState;
   isLoading: boolean;
@@ -118,19 +130,24 @@ function ResumeView({
   onCaptureMode: () => void;
   onCreateWork: (name: string) => Promise<void>;
   onSelectWork: (work: ResumeWork) => Promise<void>;
+  i18n: I18n;
 }) {
   const navigationActions = (
     <>
       {state.works.length > 0 && (
         <Action.Push
-          title="현재 Work 변경"
+          title={i18n.t("capture.changeWork")}
           icon={Icon.ArrowRight}
-          target={<WorkPicker works={state.works} activeWork={state.activeWork} onSelect={onSelectWork} />}
+          target={<WorkPicker works={state.works} activeWork={state.activeWork} onSelect={onSelectWork} i18n={i18n} />}
         />
       )}
-      <Action.Push title="새 Work 시작" icon={Icon.Plus} target={<WorkForm onCreate={onCreateWork} />} />
+      <Action.Push
+        title={i18n.t("capture.newWork")}
+        icon={Icon.Plus}
+        target={<WorkForm onCreate={onCreateWork} i18n={i18n} />}
+      />
       <Action
-        title="Capture로 돌아가기"
+        title={i18n.t("capture.backToCapture")}
         icon={Icon.TextCursor}
         shortcut={captureModeShortcut}
         onAction={onCaptureMode}
@@ -141,18 +158,18 @@ function ResumeView({
   if (error) {
     return (
       <List>
-        <List.EmptyView icon={Icon.ExclamationMark} title="재개 맥락을 불러올 수 없습니다" description={error} />
+        <List.EmptyView icon={Icon.ExclamationMark} title={i18n.t("capture.resumeContextError")} description={error} />
       </List>
     );
   }
 
   if (!state.activeWork && !isLoading) {
     return (
-      <List navigationTitle="Work 관리">
+      <List navigationTitle={i18n.t("capture.manageWork")}>
         <List.EmptyView
           icon={Icon.Folder}
-          title="현재 Work가 없습니다"
-          description="새 Work를 시작하면 멈춘 지점을 남길 수 있습니다."
+          title={i18n.t("capture.noWork")}
+          description={i18n.t("capture.startWorkHelp")}
           actions={<ActionPanel>{navigationActions}</ActionPanel>}
         />
       </List>
@@ -161,16 +178,18 @@ function ResumeView({
 
   const activeWork = state.activeWork;
   return (
-    <List isLoading={isLoading} navigationTitle={activeWork?.name ?? "Work 관리"}>
+    <List isLoading={isLoading} navigationTitle={activeWork?.name ?? i18n.t("capture.manageWork")}>
       {activeWork && (
-        <List.Section title="재개 메모">
+        <List.Section title={i18n.t("capture.resumeSection")}>
           <List.Item
-            title={state.resumeNote ?? "아직 남긴 재개 메모가 없습니다"}
-            subtitle={state.resumeNote ? "멈춘 지점과 시작할 곳" : "작업을 멈출 때 한 줄만 남기세요"}
+            title={state.resumeNote ?? i18n.t("capture.noResumeNote")}
+            subtitle={
+              state.resumeNote ? i18n.t("capture.resumeNoteSubtitle") : i18n.t("capture.resumeNoteEmptySubtitle")
+            }
             icon={Icon.Forward}
             actions={
               <ActionPanel>
-                <Action title="Capture에서 재개 메모 작성" icon={Icon.TextCursor} onAction={onCaptureMode} />
+                <Action title={i18n.t("capture.writeResumeNote")} icon={Icon.TextCursor} onAction={onCaptureMode} />
                 {navigationActions}
               </ActionPanel>
             }
@@ -182,6 +201,8 @@ function ResumeView({
 }
 
 export function CaptureCommand() {
+  const localePreferences = getPreferenceValues<RaycastLocalePreferences>();
+  const i18n = useMemo(() => getI18n(localePreferences), [localePreferences.language]);
   const [content, setContent] = useState("");
   const [importedContent, setImportedContent] = useState("");
   const [originalImportedContent, setOriginalImportedContent] = useState<string | null>(null);
@@ -197,11 +218,11 @@ export function CaptureCommand() {
       setResumeState(await loadResumeState());
       setResumeError(null);
     } catch (reason) {
-      setResumeError(reason instanceof Error ? reason.message : "재개 맥락을 불러올 수 없습니다");
+      setResumeError(reason instanceof Error ? reason.message : i18n.t("capture.resumeContextError"));
     } finally {
       setIsLoadingResume(false);
     }
-  }, []);
+  }, [i18n]);
 
   useEffect(() => {
     void refreshResumeState();
@@ -211,16 +232,16 @@ export function CaptureCommand() {
     try {
       const clipboardContent = await Clipboard.readText();
       if (!clipboardContent?.trim()) {
-        await showToast({ style: Toast.Style.Failure, title: "클립보드에 텍스트가 없습니다" });
+        await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.clipboardEmpty") });
         return;
       }
 
       setImportedContent(clipboardContent);
       setOriginalImportedContent(clipboardContent);
-      await showToast({ style: Toast.Style.Success, title: "클립보드 자료를 가져왔습니다" });
+      await showToast({ style: Toast.Style.Success, title: i18n.t("capture.clipboardImported") });
     } catch (error) {
       console.error("Failed to read clipboard", error);
-      await showToast({ style: Toast.Style.Failure, title: "클립보드 자료를 가져오지 못했습니다" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.clipboardImportFailed") });
     }
   }
 
@@ -233,7 +254,7 @@ export function CaptureCommand() {
     const trimmedContent = content.trim();
     const hasImportedContent = originalImportedContent !== null && Boolean(importedContent.trim());
     if (!trimmedContent && !hasImportedContent) {
-      await showToast({ style: Toast.Style.Failure, title: "Capture 내용을 입력하세요" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.contentRequired") });
       return;
     }
 
@@ -273,10 +294,10 @@ export function CaptureCommand() {
       await saveCapture(id, savedContent, capturedAt);
       setContent("");
       clearImportedContent();
-      await showHUD("Capture를 저장했습니다");
+      await showHUD(i18n.t("capture.saved"));
     } catch (error) {
       console.error("Failed to save capture", error);
-      await showToast({ style: Toast.Style.Failure, title: "Capture를 저장하지 못했습니다" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.saveFailed") });
     } finally {
       setIsSubmitting(false);
     }
@@ -285,11 +306,11 @@ export function CaptureCommand() {
   async function handleResumeNoteSubmit() {
     const trimmedContent = content.trim();
     if (!trimmedContent) {
-      await showToast({ style: Toast.Style.Failure, title: "재개 메모를 입력하세요" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.resumeNoteRequired") });
       return;
     }
     if (!resumeState.activeWork) {
-      await showToast({ style: Toast.Style.Failure, title: "먼저 현재 Work를 시작하세요" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.startWorkFirst") });
       return;
     }
 
@@ -298,10 +319,10 @@ export function CaptureCommand() {
       await setResumeNote(resumeState.activeWork, trimmedContent);
       setContent("");
       await refreshResumeState();
-      await showToast({ style: Toast.Style.Success, title: "재개 메모를 저장했습니다" });
+      await showToast({ style: Toast.Style.Success, title: i18n.t("capture.resumeNoteSaved") });
     } catch (error) {
       console.error("Failed to save resume note", error);
-      await showToast({ style: Toast.Style.Failure, title: "재개 메모를 저장하지 못했습니다" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.resumeNoteSaveFailed") });
     } finally {
       setIsSubmitting(false);
     }
@@ -313,7 +334,7 @@ export function CaptureCommand() {
       await refreshResumeState();
     } catch (error) {
       console.error("Failed to update resume context", error);
-      await showToast({ style: Toast.Style.Failure, title: "재개 맥락을 저장하지 못했습니다" });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("capture.contextSaveFailed") });
     }
   }
 
@@ -326,6 +347,7 @@ export function CaptureCommand() {
         onCaptureMode={() => setViewMode("capture")}
         onCreateWork={(name) => performContextMutation(() => createResumeWork(name))}
         onSelectWork={(work) => performContextMutation(() => activateResumeWork(work))}
+        i18n={i18n}
       />
     );
   }
@@ -335,25 +357,25 @@ export function CaptureCommand() {
       isLoading={isSubmitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Capture 저장" onSubmit={handleSubmit} />
+          <Action.SubmitForm title={i18n.t("capture.save")} onSubmit={handleSubmit} />
           {resumeState.activeWork && (
             <Action.SubmitForm
-              title="재개 메모로 저장"
+              title={i18n.t("capture.saveAsResumeNote")}
               shortcut={saveResumeNoteShortcut}
               onSubmit={handleResumeNoteSubmit}
             />
           )}
           <Action
-            title="클립보드에서 자료 가져오기"
+            title={i18n.t("capture.importClipboard")}
             icon={Icon.Clipboard}
             shortcut={importClipboardShortcut}
             onAction={importClipboard}
           />
           {originalImportedContent !== null && (
-            <Action title="가져온 자료 지우기" icon={Icon.Trash} onAction={clearImportedContent} />
+            <Action title={i18n.t("capture.clearImported")} icon={Icon.Trash} onAction={clearImportedContent} />
           )}
           <Action
-            title="Work 관리"
+            title={i18n.t("capture.manageWork")}
             icon={Icon.Folder}
             shortcut={resumeModeShortcut}
             onAction={() => setViewMode("resume")}
@@ -363,32 +385,35 @@ export function CaptureCommand() {
     >
       {resumeState.activeWork ? (
         <>
-          <Form.Description title="현재 Work" text={resumeState.activeWork.name} />
-          <Form.Description title="재개 메모" text={resumeState.resumeNote ?? "아직 남긴 재개 메모가 없습니다"} />
+          <Form.Description title={i18n.t("capture.currentWork")} text={resumeState.activeWork.name} />
+          <Form.Description
+            title={i18n.t("capture.resumeSection")}
+            text={resumeState.resumeNote ?? i18n.t("capture.noResumeNote")}
+          />
         </>
       ) : (
-        <Form.Description title="현재 Work" text="현재 Work가 없습니다" />
+        <Form.Description title={i18n.t("capture.currentWork")} text={i18n.t("capture.noWork")} />
       )}
       {originalImportedContent !== null ? (
         <>
           <Form.TextArea
             id="importedContent"
-            title="가져온 자료"
+            title={i18n.t("capture.importedContent")}
             value={importedContent}
             onChange={setImportedContent}
           />
-          <Form.Description text="제거하려면 Action Panel에서 ‘가져온 자료 지우기’를 선택하세요." />
+          <Form.Description text={i18n.t("capture.clearImportedHelp")} />
         </>
       ) : (
         <Form.Description
-          title="가져온 자료"
-          text={`${importClipboardShortcutLabel}를 눌러 클립보드 자료를 출처로 추가하세요.`}
+          title={i18n.t("capture.importedContent")}
+          text={i18n.t("capture.clipboardShortcutHelp", { shortcut: importClipboardShortcutLabel })}
         />
       )}
       <Form.TextArea
         id="content"
-        title="내 메모"
-        placeholder={resumeState.activeWork ? "생각을 남기거나 재개 메모를 작성하세요…" : "생각을 바로 남기세요…"}
+        title={i18n.t("capture.myNote")}
+        placeholder={i18n.t(resumeState.activeWork ? "capture.notePlaceholderWithWork" : "capture.notePlaceholder")}
         value={content}
         onChange={setContent}
         autoFocus

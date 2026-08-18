@@ -1,10 +1,13 @@
 import { seedData } from './seed'
 import { DEFAULT_BRAIN_SERVER_URL } from './config'
+import { normalizeLocalePreference } from './i18n'
+import type { LocalePreference } from './i18n'
 import type { AppData, DeploymentMode, SyncState } from './types'
 
 const STORAGE_KEY = 'contextShelf:v1'
 const API_TOKEN_STORAGE_KEY = 'contextShelf:api-token:v1'
 const BRAIN_API_TOKEN_STORAGE_KEY = 'contextShelf:brain-api-token:v1'
+const LOCALE_PREFERENCE_STORAGE_KEY = 'contextShelf:locale-preference:v1'
 
 export class StorageAccessError extends Error {
   constructor(operation: 'read' | 'write') {
@@ -17,6 +20,40 @@ export type StoredSettings = {
   data: AppData
   apiToken: string
   brainApiToken: string
+}
+
+export async function loadLocalePreference(): Promise<LocalePreference> {
+  const values = hasChromeStorage()
+    ? await readChromeStorage([LOCALE_PREFERENCE_STORAGE_KEY])
+    : { [LOCALE_PREFERENCE_STORAGE_KEY]: readLocalStorage(LOCALE_PREFERENCE_STORAGE_KEY) }
+  return normalizeLocalePreference(values[LOCALE_PREFERENCE_STORAGE_KEY])
+}
+
+export async function saveLocalePreference(preference: LocalePreference): Promise<void> {
+  const value = normalizeLocalePreference(preference)
+  if (hasChromeStorage()) {
+    await writeChromeStorage({ [LOCALE_PREFERENCE_STORAGE_KEY]: value })
+    return
+  }
+
+  writeLocalStorage({ [LOCALE_PREFERENCE_STORAGE_KEY]: value })
+}
+
+export function subscribeToLocalePreferenceChanges(listener: () => void): () => void {
+  if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+    const handleChanges = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+      if (areaName === 'local' && LOCALE_PREFERENCE_STORAGE_KEY in changes) listener()
+    }
+    chrome.storage.onChanged.addListener(handleChanges)
+    return () => chrome.storage.onChanged.removeListener(handleChanges)
+  }
+
+  if (typeof window === 'undefined') return () => {}
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === LOCALE_PREFERENCE_STORAGE_KEY) listener()
+  }
+  window.addEventListener('storage', handleStorage)
+  return () => window.removeEventListener('storage', handleStorage)
 }
 
 function hasChromeStorage() {
