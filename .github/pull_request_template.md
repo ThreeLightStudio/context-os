@@ -27,6 +27,7 @@ Commands and results:
 
 - [ ] PR title type and issue number match the source branch
 - [ ] `Fixes #<issue-number>` references the source branch's Issue
+- [ ] PR has exactly one matching `type:<branch-type>` label
 
 ## Screenshots or recordings
 

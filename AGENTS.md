@@ -39,6 +39,12 @@ priority through the repository's configured Project field.
 
 ## Branches and pull requests
 
+### Pull request labels
+
+Apply exactly one PR label matching the source branch type: `type:<type>`.
+For example, a `feat/...` branch requires the `type:feat` PR label. The
+`branch-name` workflow verifies this label.
+
 For tracked work, create a focused branch named
 `<type>/<issue-number>-<short-kebab-slug>` and keep the change scoped to its Issue.
 

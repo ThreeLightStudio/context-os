@@ -43,6 +43,10 @@ Use the CLI before starting work so the branch name is valid from the outset.
 
 ## Pull requests
 
+Use the title format `[type] Short summary (#issue-number)` and apply exactly
+one matching PR label, `type:<type>`. For example, a `feat/...` branch requires
+the `type:feat` PR label. The pull request workflow verifies this label.
+
 Describe the affected client/server, the user-visible behavior, and the
 verification commands you ran. In the related Issue section, replace the
 placeholder with `Fixes #<issue-number>` (or an equivalent closing keyword).

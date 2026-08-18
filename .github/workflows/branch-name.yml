@@ -2,7 +2,7 @@ name: Branch name
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, labeled, unlabeled, synchronize, reopened]
 
 permissions:
   contents: read
@@ -100,6 +100,21 @@ jobs:
               return;
             }
 
+            const pullRequestLabels = pullRequest.labels.map((label) => label.name);
+            const pullRequestTypeLabels = pullRequestLabels.filter((label) =>
+              label.startsWith("type:"),
+            );
+
+            if (
+              pullRequestTypeLabels.length !== 1 ||
+              pullRequestTypeLabels[0] !== expectedLabel
+            ) {
+              core.setFailed(
+                `PR must have exactly one matching type label: '${expectedLabel}'.`,
+              );
+              return;
+            }
+
             core.info(
-              `PR is linked to Issue #${issueNumber} with the '${expectedLabel}' label.`,
+              `PR is linked to Issue #${issueNumber} with the '${expectedLabel}' label on both the Issue and PR.`,
             );
