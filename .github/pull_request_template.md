@@ -3,7 +3,7 @@
 
 ## Related issue
 
-<!-- Replace the placeholder with the number from the source branch. Example: Fixes #123 -->
+<!-- Replace placeholder number from source branch. Example: Fixes #123 -->
 Fixes #
 
 ## Summary
@@ -13,13 +13,13 @@ Fixes #
 ## Verification
 
 - [ ] `pnpm verify`
-- [ ] Package-specific build or tests, if applicable
+- [ ] Package-specific build tests, if applicable
 
 Commands and results:
 
 ## User impact
 
-- Affected clients, servers, or packages:
+- Affected clients, servers, packages:
 - User-visible behavior:
 - Breaking changes: None
 
@@ -27,9 +27,10 @@ Commands and results:
 
 - [ ] PR title type and issue number match the source branch
 - [ ] `Fixes #<issue-number>` references the source branch's Issue
-- [ ] PR has exactly one matching `type:<branch-type>` label
+- [ ] The linked Issue uses the native Type mapped from the source branch type
+- [ ] The Issue is in the configured Project with its `Priority` Field set
 
 ## Screenshots or recordings
 
-Add them when UI behavior changed. Do not include private captures,
-credentials, tokens, or production configuration.
+Add when UI behavior changed. Do not include private captures, credentials,
+tokens, or production configuration.

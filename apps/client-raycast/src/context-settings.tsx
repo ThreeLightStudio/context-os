@@ -8,11 +8,12 @@ import {
   showToast,
   Toast,
 } from "@raycast/api";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { describeContextConnection } from "./connection-status";
+import { getI18n, RaycastLocalePreferences } from "./i18n";
 import { checkRemoteRecordsConnection, RemoteRecordsError } from "./remote-records-api";
 
-interface ContextPreferences {
+interface ContextPreferences extends RaycastLocalePreferences {
   serverUrl?: string;
   apiToken?: string;
 }
@@ -25,68 +26,79 @@ function codeBlock(value: string) {
 
 export function ContextSettingsCommand() {
   const preferences = getPreferenceValues<ContextPreferences>();
+  const i18n = useMemo(() => getI18n(preferences), [preferences.language]);
   const serverUrl = preferences.serverUrl?.trim() ?? "";
   const hasApiToken = Boolean(preferences.apiToken?.trim());
-  const [connectionResult, setConnectionResult] = useState("아직 연결을 확인하지 않았습니다.");
-  const connection = describeContextConnection(serverUrl, hasApiToken);
+  const [connectionResult, setConnectionResult] = useState(i18n.t("settings.notChecked"));
+  const connection = describeContextConnection(serverUrl, hasApiToken, i18n.t);
 
   const checkConnection = async () => {
     if (!serverUrl || !preferences.apiToken?.trim()) return;
-    setConnectionResult("연결을 확인하는 중…");
+    setConnectionResult(i18n.t("settings.checking"));
     try {
       await checkRemoteRecordsConnection({ serverUrl, apiToken: preferences.apiToken, timeoutMs: 10_000 });
-      setConnectionResult("연결되었습니다. API token에 read 권한이 있습니다.");
-      await showToast({ style: Toast.Style.Success, title: "Context Server 연결됨" });
+      setConnectionResult(i18n.t("settings.connected"));
+      await showToast({ style: Toast.Style.Success, title: i18n.t("settings.connectedToast") });
     } catch (error) {
-      const message = error instanceof RemoteRecordsError ? error.message : "Context Server에 연결할 수 없습니다.";
+      const message = error instanceof RemoteRecordsError ? error.message : i18n.t("settings.checkFailed");
       setConnectionResult(message);
-      await showToast({ style: Toast.Style.Failure, title: "연결을 확인하지 못했습니다", message });
+      await showToast({ style: Toast.Style.Failure, title: i18n.t("settings.checkFailed"), message });
     }
   };
 
   return (
     <Detail
-      markdown={`# Context Settings
+      markdown={`# ${i18n.t("settings.title")}
 
-These are the connection settings used by **Capture**, **Recent Captures**, and **Remote Records**.
+${i18n.t("settings.connectionMarkdown")}
 
-## 연결 대상
+## ${i18n.t("settings.connectionTarget")}
 
 **${connection.title}**
 
 ${connection.detail}
 
-## 연결 상태
+## ${i18n.t("settings.connectionStatus")}
 
 ${connectionResult}
 
-## Context Server URL
+## ${i18n.t("settings.serverUrl")}
 
-${codeBlock(serverUrl || "Not configured")}
+${codeBlock(serverUrl || i18n.t("settings.notConfigured"))}
 
-## API token
+## ${i18n.t("settings.apiToken")}
 
-${hasApiToken ? "Configured. The secret token is hidden." : "Not configured. Add a token with both read and write scopes in Extension Preferences."}
+${hasApiToken ? i18n.t("settings.configuredDetail") : i18n.t("settings.notConfiguredDetail")}
 `}
       metadata={
         <Detail.Metadata>
-          <Detail.Metadata.Label title="Server URL" text={serverUrl || "Not configured"} />
-          <Detail.Metadata.Label title="API token" text={hasApiToken ? "Configured" : "Not configured"} />
-          <Detail.Metadata.Label title="Storage mode" text={connection.title} />
-          <Detail.Metadata.Label title="Records endpoint" text="/v1/records" />
+          <Detail.Metadata.Label
+            title={i18n.t("settings.serverUrl")}
+            text={serverUrl || i18n.t("settings.notConfigured")}
+          />
+          <Detail.Metadata.Label
+            title={i18n.t("settings.apiToken")}
+            text={hasApiToken ? i18n.t("settings.configured") : i18n.t("settings.notConfigured")}
+          />
+          <Detail.Metadata.Label title={i18n.t("settings.storageMode")} text={connection.title} />
+          <Detail.Metadata.Label title={i18n.t("settings.recordsEndpoint")} text="/v1/records" />
         </Detail.Metadata>
       }
       actions={
         <ActionPanel>
           <Action
-            title="Edit Extension Preferences"
+            title={i18n.t("settings.editPreferences")}
             icon={Icon.Gear}
             onAction={() => void openExtensionPreferences()}
           />
           {serverUrl && hasApiToken && (
-            <Action title="Check Connection" icon={Icon.Network} onAction={() => void checkConnection()} />
+            <Action
+              title={i18n.t("settings.checkConnection")}
+              icon={Icon.Network}
+              onAction={() => void checkConnection()}
+            />
           )}
-          {serverUrl && <Action.CopyToClipboard title="Copy Server URL" content={serverUrl} />}
+          {serverUrl && <Action.CopyToClipboard title={i18n.t("settings.copyServerUrl")} content={serverUrl} />}
         </ActionPanel>
       }
     />
