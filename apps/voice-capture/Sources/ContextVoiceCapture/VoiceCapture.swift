@@ -357,7 +357,6 @@ public final class VoiceService: @unchecked Sendable {
 
     public init(transcriber: WhisperCppTranscriber) {
         self.transcriber = transcriber
-        WhisperCppTranscriber.clearTemporaryFiles()
     }
 
     public func handle(_ request: VoiceRequest) -> VoiceResponse {
@@ -413,7 +412,6 @@ public final class VoiceService: @unchecked Sendable {
         stateLock.unlock()
         input?.stop()
         buffer.clear()
-        WhisperCppTranscriber.clearTemporaryFiles()
         return status()
     }
 
