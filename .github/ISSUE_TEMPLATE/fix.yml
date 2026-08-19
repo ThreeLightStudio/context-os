@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This template assigns the native GitHub Issue Type `Bug`. After this issue is created, create the branch with:
+        This template assigns the native GitHub Issue Type `Bug`. After this issue is created, create its dedicated worktree with:
         `pnpm branch fix <issue-number> <short-kebab-slug>`
         Before implementation, add the issue to the configured Project and set its `Priority` Field.
 

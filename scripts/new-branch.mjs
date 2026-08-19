@@ -1,23 +1,84 @@
 #!/usr/bin/env node
 
+import { existsSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
 
 const TYPES = new Set(["feat", "fix", "refactor", "docs", "chore"]);
 const ISSUE_NUMBER_PATTERN = /^[0-9]+$/;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const BRANCH_PATTERN = /^(feat|fix|refactor|docs|chore)\/[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const BASE_REF = "origin/main";
+
+function usage() {
+  return "Usage: pnpm branch <feat|fix|refactor|docs|chore> <issue-number> <short-kebab-slug>";
+}
 
 function fail(message) {
   console.error(`Error: ${message}`);
-  console.error("Usage: pnpm branch <feat|fix|refactor|docs|chore> <issue-number> <short-kebab-slug>");
+  console.error(usage());
   console.error("Example: pnpm branch feat 123 add-sso");
   process.exit(1);
+}
+
+function runGit(args, options = {}) {
+  const result = spawnSync("git", args, {
+    encoding: "utf8",
+    ...options,
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  return result;
+}
+
+function gitOutput(args, cwd) {
+  const result = runGit(args, { cwd });
+  if (result.status !== 0) {
+    throw new Error(result.stderr?.trim() || `git ${args.join(" ")} failed`);
+  }
+  return result.stdout.trim();
+}
+
+function getRepositoryRoot() {
+  const commonGitDir = gitOutput([
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  ]);
+  return resolve(dirname(commonGitDir));
+}
+
+function isRefAvailable(repoRoot, ref) {
+  return runGit(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+    cwd: repoRoot,
+    stdio: "ignore",
+  }).status === 0;
+}
+
+function isLocalBranchAvailable(repoRoot, branchName) {
+  return runGit(["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], {
+    cwd: repoRoot,
+    stdio: "ignore",
+  }).status === 0;
+}
+
+function getCanonicalStatus(repoRoot) {
+  return gitOutput([
+    "-C",
+    repoRoot,
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+  ]);
 }
 
 const args = process.argv.slice(2);
 
 if (args.length === 1 && ["--help", "-h"].includes(args[0])) {
-  console.log("Usage: pnpm branch <feat|fix|refactor|docs|chore> <issue-number> <short-kebab-slug>");
+  console.log(usage());
   console.log("Example: pnpm branch feat 123 add-sso");
   process.exit(0);
 }
@@ -46,26 +107,45 @@ if (!BRANCH_PATTERN.test(branchName)) {
   fail(`generated branch name is invalid: '${branchName}'`);
 }
 
-const currentBranch = spawnSync("git", ["branch", "--show-current"], {
-  encoding: "utf8",
-});
-
-if (currentBranch.error || currentBranch.status !== 0) {
-  fail("could not determine the current Git branch");
+let repositoryRoot;
+try {
+  repositoryRoot = getRepositoryRoot();
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
 }
 
-if (!currentBranch.stdout.trim()) {
-  fail("run this command from an existing branch, not a detached HEAD");
+if (!isRefAvailable(repositoryRoot, BASE_REF)) {
+  fail(`${BASE_REF} is unavailable; run 'git fetch origin main' and retry`);
 }
 
-console.log(`Creating branch ${branchName} from ${currentBranch.stdout.trim()}...`);
-
-const result = spawnSync("git", ["switch", "-c", branchName], {
-  stdio: "inherit",
-});
-
-if (result.error) {
-  fail(result.error.message);
+if (isLocalBranchAvailable(repositoryRoot, branchName)) {
+  fail(`branch '${branchName}' already exists`);
 }
 
-process.exit(result.status ?? 1);
+const worktreePath = resolve(repositoryRoot, ".worktrees", `${issueNumber}-${slug}`);
+
+if (existsSync(worktreePath)) {
+  fail(`worktree path already exists: ${worktreePath}`);
+}
+
+const canonicalStatus = getCanonicalStatus(repositoryRoot);
+if (canonicalStatus) {
+  console.warn(
+    `Warning: canonical checkout ${repositoryRoot} has uncommitted changes; leaving them untouched.`,
+  );
+}
+
+mkdirSync(resolve(repositoryRoot, ".worktrees"), { recursive: true });
+
+console.log(`Creating worktree ${worktreePath} from ${BASE_REF}...`);
+const result = runGit(
+  ["worktree", "add", "-b", branchName, worktreePath, BASE_REF],
+  { cwd: repositoryRoot, stdio: "inherit" },
+);
+
+if (result.status !== 0) {
+  process.exit(result.status ?? 1);
+}
+
+console.log(`Worktree ready: ${worktreePath}`);
+console.log(`Branch: ${branchName}`);

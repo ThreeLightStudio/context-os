@@ -49,6 +49,10 @@ the work is merged. Do not use classification or priority labels as a
 substitute for native Issue Type or Project Fields. See
 [`docs/issue-field-guidance.md`](docs/issue-field-guidance.md).
 
+## Canonical checkout and worktrees
+
+Keep the primary checkout on a clean, synchronized `main` branch. Before starting an Issue, update it with `git fetch origin main`, `git switch main`, and `git pull --ff-only origin main`. Create implementation work with `pnpm branch <type> <issue-number> <short-kebab-slug>`; the command creates `.worktrees/<issue-number>-<short-kebab-slug>` from `origin/main` and leaves the canonical checkout unchanged. Work and verify from that dedicated worktree.
+
 ## Branches
 
 Create new branches with the repository CLI:
@@ -57,9 +61,7 @@ Create new branches with the repository CLI:
 pnpm branch feat 123 add-sso
 ```
 
-Supported types are `feat`, `fix`, `refactor`, `docs`, and `chore`. The CLI
-creates branches in the format `<type>/<issue-number>-<short-kebab-slug>` and
-should be used before work starts so the branch name is valid from the outset.
+Supported types are `feat`, `fix`, `refactor`, `docs`, and `chore`. The CLI creates a branch in the format `<type>/<issue-number>-<short-kebab-slug>` and its dedicated worktree before work starts, using `origin/main` as the base so the branch name is valid from the outset.
 
 ## Pull requests
 
