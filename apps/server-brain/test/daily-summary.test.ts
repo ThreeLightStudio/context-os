@@ -97,11 +97,58 @@ describe("daily-summary context resolution", () => {
       recordCount: 2,
       summary: "Two notes",
       keyPoints: ["morning", "evening"],
+      variants: {
+        quick: "Two notes",
+        standard: "Two notes",
+        deep: "Two notes\n\n- morning\n- evening",
+      },
+      claims: [],
+      sources: [
+        {
+          recordId: "2026-08-13T14:00:00.000Z",
+          preview: "evening note",
+          recordedAt: "2026-08-13T14:00:00.000Z",
+          client: "desktop",
+        },
+        {
+          recordId: "2026-08-12T15:00:00.000Z",
+          preview: "morning note",
+          recordedAt: "2026-08-12T15:00:00.000Z",
+          client: "desktop",
+        },
+      ],
     });
     expect(listRecords).toHaveBeenNthCalledWith(1, { limit: MAX_DAILY_SUMMARY_RECORDS });
     expect(listRecords).toHaveBeenNthCalledWith(2, { limit: MAX_DAILY_SUMMARY_RECORDS, cursor: "next-page" });
     expect(mock.generateStructured).toHaveBeenCalledOnce();
     expect(mock.generateStructured.mock.calls[0][0].userPrompt).toContain("evening note");
+  });
+
+  it("returns shared answer variants and removes unsupported source IDs", async () => {
+    const mock = provider({
+      summary: "Supported summary",
+      keyPoints: ["One point"],
+      variants: { quick: "Quick", standard: "Standard", deep: "Deep" },
+      claims: [
+        { id: "claim-1", text: "Supported claim", sourceIds: ["source-a", "forged-id"], support: "direct" },
+        { id: "claim-2", text: "Unknown claim", sourceIds: ["forged-id"], support: "direct" },
+      ],
+    });
+    const execution = await runner(mock.value, {
+      listRecords: vi.fn(async () => ({
+        records: [record("2026-08-13T10:00:00.000Z", "source text", "source-a")],
+        nextCursor: null,
+      })),
+    }).run("daily-summary", { date: "2026-08-13", timezone: "Asia/Seoul" });
+
+    expect(execution.result).toMatchObject({
+      variants: { quick: "Quick", standard: "Standard", deep: "Deep" },
+      claims: [
+        { id: "claim-1", sourceIds: ["source-a"], support: "direct" },
+        { id: "claim-2", sourceIds: [], support: "unverified" },
+      ],
+      sources: [{ recordId: "source-a", preview: "source text" }],
+    });
   });
 
   it("does not call the provider when no records match", async () => {
