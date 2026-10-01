@@ -1,14 +1,14 @@
 import { ArrowLeft, CalendarDays, Check, Cloud, Copy, Link2, Monitor, RefreshCw, Search, Send, Settings, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getActiveTab, subscribeToActiveTab } from './chromeApi'
-import { getBrowserTimeZone, getLocalDate, normalizeBrainEndpointUrl, runDailySummary } from './brainCapture'
-import type { DailySummaryResult } from './brainCapture'
+import { getBrowserTimeZone, getDailySummaryVariant, getLocalDate, normalizeBrainEndpointUrl, runDailySummary } from './brainCapture'
+import type { DailySummaryResult, DailySummarySource, EvidenceSupport, SummaryLevel } from './brainCapture'
 import { DEFAULT_BRAIN_SERVER_URL } from './config'
 import { checkContextServerConnection, createUrlMemoryCapture, deleteRemoteCapture, listRemoteCaptures, normalizeEndpointUrl, postCapture } from './contextCapture'
 import type { RemoteCapture } from './contextCapture'
 import { filterLinkedThoughtsForUrl, LinkedThoughtsLoader } from './linkedThoughts'
 import { createI18n, resolveLocale } from './i18n'
-import type { LocalePreference } from './i18n'
+import type { LocalePreference, MessageKey } from './i18n'
 import { loadLocalePreference, loadStoredSettings, saveAppData, saveLocalePreference, saveStoredSettings, subscribeToLocalePreferenceChanges, subscribeToStoredSettingsChanges } from './storage'
 import { copyTextToClipboard, filterThoughtsForCopy, formatThoughtsForClipboard, getThoughtCopyRange } from './thoughtExport'
 import type { AppData, CaptureOutboxItem, ChromeSurface, DeploymentMode, SavedTab, UrlMemory } from './types'
@@ -27,6 +27,87 @@ export function canCaptureOnUrl(url: string | undefined) {
   } catch {
     return false
   }
+}
+
+const SUMMARY_LEVELS: SummaryLevel[] = ['quick', 'standard', 'deep']
+const SUMMARY_LEVEL_KEYS: Record<SummaryLevel, MessageKey> = {
+  quick: 'summary.level.quick',
+  standard: 'summary.level.standard',
+  deep: 'summary.level.deep',
+}
+const SUPPORT_KEYS: Record<EvidenceSupport, MessageKey> = {
+  direct: 'summary.support.direct',
+  partial: 'summary.support.partial',
+  unverified: 'summary.support.unverified',
+  conflict: 'summary.support.conflict',
+}
+
+type SummaryResultViewProps = {
+  result: DailySummaryResult
+  level: SummaryLevel
+  onLevelChange: (level: SummaryLevel) => void
+  onOpenSource: (source: DailySummarySource) => void
+  formatDate: ReturnType<typeof createI18n>['formatDate']
+  t: ReturnType<typeof createI18n>['t']
+}
+
+function SummaryResultView({ result, level, onLevelChange, onOpenSource, formatDate, t }: SummaryResultViewProps) {
+  const sources = result.sources ?? []
+  const sourcesById = new Map(sources.map((source) => [source.recordId, source]))
+
+  return (
+    <section className={`summary-result ${result.recordCount === 0 ? 'is-empty' : ''}`} aria-live="polite">
+      <div className="summary-result-meta"><span>{result.recordCount === 0 ? t('summary.noRecords') : t('summary.recordCount', { count: result.recordCount })}</span><span>{result.date} · {result.timezone}</span></div>
+      {result.variants ? (
+        <div className="summary-levels" role="tablist" aria-label={t('summary.levelLabel')}>
+          {SUMMARY_LEVELS.map((option) => (
+            <button
+              className={level === option ? 'is-selected' : ''}
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={level === option}
+              onClick={() => onLevelChange(option)}
+            >
+              {t(SUMMARY_LEVEL_KEYS[option])}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <p className="summary-text">{getDailySummaryVariant(result, level)}</p>
+      {result.keyPoints.length > 0 ? <div className="summary-points"><h2>{t('summary.keyPoints')}</h2><ul>{result.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div> : <p className="summary-empty-help">{t('summary.emptyHelp')}</p>}
+      {result.claims && result.claims.length > 0 ? (
+        <div className="summary-evidence">
+          <div className="summary-evidence-heading"><h2>{t('summary.evidenceTitle')}</h2><span>{t('summary.evidenceHelp')}</span></div>
+          <div className="summary-claims">
+            {result.claims.map((claim) => (
+              <article className={`summary-claim support-${claim.support}`} key={claim.id}>
+                <div className="summary-claim-status">{t(SUPPORT_KEYS[claim.support])}</div>
+                <p>{claim.text}</p>
+                {claim.sourceIds.length > 0 ? <div className="summary-claim-sources">{claim.sourceIds.map((sourceId) => {
+                  const source = sourcesById.get(sourceId)
+                  return source ? <button className="summary-source-chip" key={sourceId} type="button" title={source.preview} onClick={() => onOpenSource(source)}>{source.title || source.preview}</button> : null
+                })}</div> : null}
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {sources.length > 0 ? (
+        <div className="summary-sources">
+          <h2>{t('summary.sourcesTitle', { count: sources.length })}</h2>
+          <div className="summary-source-list">
+            {sources.map((source) => (
+              <button className="summary-source" key={source.recordId} type="button" title={source.preview} onClick={() => onOpenSource(source)}>
+                <strong>{source.title || source.client} · {formatDate(new Date(source.recordedAt), { dateStyle: 'medium', timeStyle: 'short' })}</strong>
+                <span>{source.preview}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
 }
 
 export function App({ surface }: { surface: ChromeSurface }) {
@@ -51,6 +132,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
   const [connectionChecking, setConnectionChecking] = useState(false)
   const [thoughts, setThoughts] = useState<RemoteCapture[]>([])
   const [thoughtQuery, setThoughtQuery] = useState('')
+  const [thoughtIdFilter, setThoughtIdFilter] = useState('')
   const [thoughtUrlFilter, setThoughtUrlFilter] = useState('')
   const [thoughtStatus, setThoughtStatus] = useState('')
   const [copyStart, setCopyStart] = useState('')
@@ -59,6 +141,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
   const [linkedThoughts, setLinkedThoughts] = useState<RemoteCapture[]>([])
   const [summaryDate, setSummaryDate] = useState(() => getLocalDate())
   const [summaryResult, setSummaryResult] = useState<DailySummaryResult | null>(null)
+  const [summaryLevel, setSummaryLevel] = useState<SummaryLevel>('standard')
   const [summaryStatus, setSummaryStatus] = useState('')
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [settingsChangedElsewhere, setSettingsChangedElsewhere] = useState(false)
@@ -485,13 +568,32 @@ export function App({ surface }: { surface: ChromeSurface }) {
   }, [activeTab?.url, linkedThoughtsLoader, loadLinkedThoughts, t])
 
   const openThoughts = () => {
+    setThoughtIdFilter('')
     setThoughtUrlFilter('')
+    setThoughtQuery('')
     setScreen('thoughts')
     void loadThoughts()
   }
 
+  const openSourceRecord = (source: DailySummarySource) => {
+    if (data?.sync.endpointUrl && apiToken) {
+      setThoughtIdFilter(source.recordId)
+      setThoughtQuery('')
+      setThoughtUrlFilter('')
+      setScreen('thoughts')
+      void loadThoughts()
+      return
+    }
+    if (source.url) {
+      void openThoughtLink(source.url)
+      return
+    }
+    setSummaryStatus(t('summary.sourceConnectionRequired'))
+  }
+
   const openSummary = () => {
     setSummaryDate(getLocalDate())
+    setSummaryLevel('standard')
     setSummaryStatus('')
     setScreen('summary')
   }
@@ -514,8 +616,9 @@ export function App({ surface }: { surface: ChromeSurface }) {
     }
   }
 
-  const openLinkedThoughts = () => {
+const openLinkedThoughts = () => {
     if (!activeTab?.url) return
+    setThoughtIdFilter('')
     setThoughtQuery('')
     setThoughtUrlFilter(activeTab.url)
     setScreen('thoughts')
@@ -602,6 +705,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
   const canCapture = !activeTab || canCaptureOnUrl(activeTab.url)
   const visibleThoughts = thoughts.filter((thought) =>
     thought.data.content.toLocaleLowerCase().includes(thoughtQuery.trim().toLocaleLowerCase()) &&
+    (!thoughtIdFilter || thought.id === thoughtIdFilter) &&
     (!thoughtUrlFilter || thought.data.context?.browser?.url === thoughtUrlFilter)
   )
 
@@ -725,11 +829,14 @@ export function App({ surface }: { surface: ChromeSurface }) {
           </button>
           {summaryStatus ? <p className="summary-error" role="alert">{summaryStatus}</p> : null}
           {summaryResult ? (
-            <section className={`summary-result ${summaryResult.recordCount === 0 ? 'is-empty' : ''}`} aria-live="polite">
-              <div className="summary-result-meta"><span>{summaryResult.recordCount === 0 ? t('summary.noRecords') : t('summary.recordCount', { count: summaryResult.recordCount })}</span><span>{summaryResult.date} · {summaryResult.timezone}</span></div>
-              <p className="summary-text">{summaryResult.summary}</p>
-              {summaryResult.keyPoints.length > 0 ? <div className="summary-points"><h2>{t('summary.keyPoints')}</h2><ul>{summaryResult.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div> : <p className="summary-empty-help">{t('summary.emptyHelp')}</p>}
-            </section>
+            <SummaryResultView
+              result={summaryResult}
+              level={summaryLevel}
+              onLevelChange={setSummaryLevel}
+              onOpenSource={openSourceRecord}
+              formatDate={formatDate}
+              t={t}
+            />
           ) : null}
         </section>
       ) : screen === 'thoughts' ? (
@@ -744,6 +851,7 @@ export function App({ surface }: { surface: ChromeSurface }) {
             <div><Search size={17} aria-hidden="true" /><input value={thoughtQuery} onChange={(event) => setThoughtQuery(event.target.value)} placeholder={t('thoughts.searchPlaceholder')} /></div>
           </label>
           {thoughtUrlFilter ? <div className="link-filter"><Link2 size={14} /><span>{t('thoughts.filteredByLink')}</span><button type="button" onClick={() => setThoughtUrlFilter('')}>{t('thoughts.showAll')}</button></div> : null}
+          {thoughtIdFilter ? <div className="link-filter"><Link2 size={14} /><span>{t('thoughts.filteredByRecord')}</span><button type="button" onClick={() => setThoughtIdFilter('')}>{t('thoughts.showAll')}</button></div> : null}
           <section className="copy-thoughts" aria-labelledby="copy-thoughts-title">
             <div className="copy-thoughts-heading"><div><p className="eyebrow">{t('thoughts.externalUse')}</p><h2 id="copy-thoughts-title">{t('thoughts.copyTitle')}</h2></div><Copy size={18} aria-hidden="true" /></div>
             <p>{t('thoughts.copyDescription')}</p>

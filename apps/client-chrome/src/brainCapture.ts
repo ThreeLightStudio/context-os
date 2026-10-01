@@ -8,12 +8,33 @@ export type DailySummaryInput = {
   timezone: string
 }
 
+export type SummaryLevel = 'quick' | 'standard' | 'deep'
+export type EvidenceSupport = 'direct' | 'partial' | 'unverified' | 'conflict'
+export type DailySummaryVariants = Record<SummaryLevel, string>
+export type DailySummaryClaim = {
+  id: string
+  text: string
+  sourceIds: string[]
+  support: EvidenceSupport
+}
+export type DailySummarySource = {
+  recordId: string
+  preview: string
+  recordedAt: string
+  client: string
+  title?: string
+  url?: string
+}
+
 export type DailySummaryResult = {
   date: string
   timezone: string
   recordCount: number
   summary: string
   keyPoints: string[]
+  variants?: DailySummaryVariants
+  claims?: DailySummaryClaim[]
+  sources?: DailySummarySource[]
 }
 
 export class BrainRequestError extends Error {}
@@ -38,12 +59,45 @@ function headers(apiToken: string) {
 function isDailySummaryResult(value: unknown): value is DailySummaryResult {
   if (!value || typeof value !== 'object') return false
   const result = value as Partial<DailySummaryResult>
-  return typeof result.date === 'string' &&
+  if (!(typeof result.date === 'string' &&
     typeof result.timezone === 'string' &&
     typeof result.recordCount === 'number' &&
     typeof result.summary === 'string' &&
     Array.isArray(result.keyPoints) &&
-    result.keyPoints.every((point) => typeof point === 'string')
+    result.keyPoints.every((point) => typeof point === 'string'))) return false
+
+  if (result.variants !== undefined) {
+    const variants = result.variants
+    if (!variants || typeof variants !== 'object' || Array.isArray(variants)) return false
+    if (!['quick', 'standard', 'deep'].every((level) => typeof variants[level as SummaryLevel] === 'string')) return false
+  }
+
+  if (result.claims !== undefined) {
+    if (!Array.isArray(result.claims) || !result.claims.every((claim) => {
+      if (!claim || typeof claim !== 'object') return false
+      const item = claim as Partial<DailySummaryClaim>
+      return typeof item.id === 'string' && typeof item.text === 'string' && Array.isArray(item.sourceIds) &&
+        item.sourceIds.every((sourceId) => typeof sourceId === 'string') &&
+        typeof item.support === 'string' && ['direct', 'partial', 'unverified', 'conflict'].includes(item.support)
+    })) return false
+  }
+
+  if (result.sources !== undefined) {
+    if (!Array.isArray(result.sources) || !result.sources.every((source) => {
+      if (!source || typeof source !== 'object') return false
+      const item = source as Partial<DailySummarySource>
+      return typeof item.recordId === 'string' && typeof item.preview === 'string' &&
+        typeof item.recordedAt === 'string' && typeof item.client === 'string' &&
+        (item.title === undefined || typeof item.title === 'string') &&
+        (item.url === undefined || typeof item.url === 'string')
+    })) return false
+  }
+
+  return true
+}
+
+export function getDailySummaryVariant(result: DailySummaryResult, level: SummaryLevel): string {
+  return result.variants?.[level] ?? result.summary
 }
 
 function errorMessage(status: number, body: unknown) {
